@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.5...code-smells-v0.2.6) (2026-04-20)
+
+
+### Bug Fixes
+
+* resolve jscpd + knip bins via walk-up, not hoisted .bin/ path ([78208a1](https://github.com/fyodoriv/code-smells/commit/78208a11717572ee3d1c017b25776e75df267f60))
+
 ## [0.2.5](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.4...code-smells-v0.2.5) (2026-04-20)
 
 
