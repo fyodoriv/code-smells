@@ -41,7 +41,8 @@
  * tsconfig in target, no lockfile) — we detect missing inputs upfront.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, resolve } from "node:path";
 
 import coveragePlugin from "@code-pushup/coverage-plugin";
 import jsPackagesPlugin from "@code-pushup/js-packages-plugin";
@@ -61,6 +62,30 @@ import typeCoveragePlugin from "./plugins/type-coverage.plugin.mjs";
 
 const toolRoot = resolve(new URL(".", import.meta.url).pathname);
 const targetDir = resolve(process.env.CP_TARGET ?? process.cwd());
+
+/**
+ * Resolve where reports should land. Precedence:
+ *   1. CP_OUTPUT_DIR env var (explicit user override, absolute or relative
+ *      to cwd) — honors local workflows like `CP_OUTPUT_DIR=./reports`.
+ *   2. OS cache dir: `$XDG_CACHE_HOME/code-smells/<target-name>` on Linux,
+ *      `~/Library/Caches/code-smells/<target-name>` on macOS,
+ *      `tmpdir()/code-smells/<target-name>` on Windows. Default — this
+ *      keeps reports out of the target repo so they never show up in
+ *      `git status` and don't need gitignoring.
+ */
+const resolveOutputDir = () => {
+  if (process.env.CP_OUTPUT_DIR) return resolve(process.env.CP_OUTPUT_DIR);
+  const safeName = basename(targetDir).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
+  const cacheHome =
+    process.env.XDG_CACHE_HOME ??
+    (process.platform === "darwin"
+      ? resolve(homedir(), "Library/Caches")
+      : process.platform === "win32"
+        ? tmpdir()
+        : resolve(homedir(), ".cache"));
+  return resolve(cacheHome, "code-smells", safeName);
+};
+const outputDir = resolveOutputDir();
 
 // Auto-detect source glob for monorepos. If the user didn't set
 // CP_PATTERNS and the target has no top-level src/ but has workspace
@@ -333,11 +358,10 @@ const filteredCategories = declaredCategories
   .filter((cat) => cat.refs.length > 0);
 
 export default {
-  // Reports land in the TARGET repo's reports/ dir, not the tool's own
-  // install dir. When a user runs `code-smells` from /path/to/their/repo,
-  // they expect /path/to/their/repo/reports/report.{json,md} — not a
-  // file inside ~/.npm/_npx/<hash>/node_modules/code-smells/reports.
-  persist: { outputDir: resolve(targetDir, "reports") },
+  // Reports land in an OS cache dir by default (outside the target repo),
+  // so running the tool never adds untracked files to `git status`. Set
+  // CP_OUTPUT_DIR=./reports to keep them local instead.
+  persist: { outputDir },
   plugins: resolvedPlugins,
   categories: filteredCategories,
 };

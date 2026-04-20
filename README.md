@@ -111,11 +111,13 @@ CP_TARGET=/path/to/repo npx code-smells
 | Var | Default | Purpose |
 |---|---|---|
 | `CP_TARGET` | current directory | Override the repo under analysis. Useful in CI / wrappers where you can't `cd` first. |
-| `CP_PATTERNS` | `src/**/*.{ts,tsx}` | Glob for source files (ESLint, jsdocs, type-coverage) |
+| `CP_PATTERNS` | `src/**/*.{ts,tsx}` (auto-detects workspaces in monorepos) | Glob for source files (ESLint, jsdocs, type-coverage) |
 | `CP_ENTRY` | `src` (auto-detects workspaces in monorepos) | dependency-cruiser entry point(s); comma-separated list |
 | `CP_TSCONFIG` | auto-detected from `references` | Explicit tsconfig path(s), comma-separated |
 | `CP_COVERAGE_LCOV` | `coverage/lcov.info` if present | Path to lcov file for the coverage audit |
 | `CP_ENABLE_FORMATJS` | off | Set `=true` to enable `formatjs/no-literal-string-in-jsx` (react-intl repos) |
+| `CP_OUTPUT_DIR` | OS cache dir | Where reports land. Set `=./reports` to keep them inside the target repo. |
+| `CP_OPEN` | off | Set `=md` or `=json` to auto-open the report after the run (macOS `open`, Linux `xdg-open`, Windows `start`). |
 
 ### Custom ESLint rules
 

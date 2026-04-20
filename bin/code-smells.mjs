@@ -10,11 +10,13 @@
  *   npx code-smells collect --verbose         # or pass a full subcommand
  *
  * Env var knobs are honored verbatim (CP_TARGET, CP_PATTERNS, CP_ENTRY,
- * CP_TSCONFIG, CP_COVERAGE_LCOV, CP_ENABLE_FORMATJS). See README.md.
+ * CP_TSCONFIG, CP_COVERAGE_LCOV, CP_ENABLE_FORMATJS, CP_OUTPUT_DIR,
+ * CP_OPEN). See README.md.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Resolve the bundled config file relative to this script — works whether
@@ -39,6 +41,22 @@ if (!existsSync(targetDir)) {
   console.error(`code-smells: CP_TARGET directory does not exist: ${targetDir}`);
   process.exit(1);
 }
+
+// Mirror code-pushup.config.mjs's output-directory resolution so we can
+// print the report path after the run. Keep the logic in sync.
+const resolveOutputDir = () => {
+  if (process.env.CP_OUTPUT_DIR) return resolve(process.env.CP_OUTPUT_DIR);
+  const safeName = basename(targetDir).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
+  const cacheHome =
+    process.env.XDG_CACHE_HOME ??
+    (process.platform === "darwin"
+      ? resolve(homedir(), "Library/Caches")
+      : process.platform === "win32"
+        ? tmpdir()
+        : resolve(homedir(), ".cache"));
+  return resolve(cacheHome, "code-smells", safeName);
+};
+const outputDir = resolveOutputDir();
 
 // If the user didn't pass a subcommand, default to 'collect' — matches the
 // 99% use case and lets `npx code-smells` Just Work.
@@ -69,5 +87,28 @@ child.on("error", (err) => {
 });
 
 child.on("exit", (code, signal) => {
+  // Print a clickable report path — most terminals render file:// URLs as
+  // Cmd/Ctrl+click targets. Helps users find reports without digging.
+  const mdPath = resolve(outputDir, "report.md");
+  const jsonPath = resolve(outputDir, "report.json");
+  if (code === 0 && existsSync(mdPath)) {
+    process.stderr.write(`\nOpen report: file://${mdPath}\n`);
+    process.stderr.write(`         or: file://${jsonPath}\n`);
+  }
+
+  // Optional auto-open. CP_OPEN=md | html | json picks a format; if set,
+  // spawn the platform's default viewer (macOS `open`, Windows `start`,
+  // Linux `xdg-open`). Backgrounded so it doesn't delay our exit.
+  const openFormat = process.env.CP_OPEN;
+  if (code === 0 && openFormat) {
+    const formatMap = { md: mdPath, markdown: mdPath, json: jsonPath };
+    const target = formatMap[openFormat.toLowerCase()];
+    if (target && existsSync(target)) {
+      const opener =
+        process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+      spawnSync(opener, [target], { stdio: "ignore", detached: true });
+    }
+  }
+
   process.exit(code ?? (signal ? 1 : 0));
 });
