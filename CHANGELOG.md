@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.4...code-smells-v0.2.5) (2026-04-20)
+
+
+### Bug Fixes
+
+* auto-detect monorepo pattern + land reports in target dir ([f8d6b2b](https://github.com/fyodoriv/code-smells/commit/f8d6b2b0ea1db58205563f3dbe6ebf4187d32b9a))
+
 ## [0.2.4](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.3...code-smells-v0.2.4) (2026-04-20)
 
 
