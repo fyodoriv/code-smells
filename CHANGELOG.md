@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.3...code-smells-v0.2.4) (2026-04-20)
+
+
+### Bug Fixes
+
+* await jsPackagesPlugin before mutating its runner ([e47e482](https://github.com/fyodoriv/code-smells/commit/e47e482245a6b68671fc71d6cc9a00b38a828278))
+
 ## [0.2.3](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.2...code-smells-v0.2.3) (2026-04-20)
 
 
