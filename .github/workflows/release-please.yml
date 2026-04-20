@@ -73,8 +73,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: 22
+
+      - name: Upgrade to npm 11+ for OIDC trusted publishing
+        # npm 11+ has first-class Trusted Publishing support and issues
+        # the OIDC-based publish without needing NODE_AUTH_TOKEN. Node 22
+        # ships npm 10.x; bumping explicitly here pins a known-good
+        # version without depending on runner-image npm updates.
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
