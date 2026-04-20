@@ -61,7 +61,22 @@ import typeCoveragePlugin from "./plugins/type-coverage.plugin.mjs";
 
 const toolRoot = resolve(new URL(".", import.meta.url).pathname);
 const targetDir = resolve(process.env.CP_TARGET ?? process.cwd());
-const patterns = process.env.CP_PATTERNS ?? "src/**/*.{ts,tsx}";
+
+// Auto-detect source glob for monorepos. If the user didn't set
+// CP_PATTERNS and the target has no top-level src/ but has workspace
+// subdirs (plugins/<ws>/src, libs/<ws>/src, packages/<ws>/src), use a
+// brace-expanded glob that covers all of them. Otherwise fall back to
+// the single-package default. This matches the CP_ENTRY auto-detection
+// the coupling plugin does — so zero-config run from a monorepo root
+// "just works" for ESLint, jsdocs, and type-coverage too.
+const resolveDefaultPatterns = () => {
+  if (existsSync(resolve(targetDir, "src"))) return "src/**/*.{ts,tsx}";
+  const wsDirs = ["plugins", "libs", "packages"].filter((d) => existsSync(resolve(targetDir, d)));
+  if (wsDirs.length === 0) return "src/**/*.{ts,tsx}";
+  const braced = wsDirs.length === 1 ? wsDirs[0] : `{${wsDirs.join(",")}}`;
+  return `${braced}/*/src/**/*.{ts,tsx}`;
+};
+const patterns = process.env.CP_PATTERNS ?? resolveDefaultPatterns();
 
 // Conditional plugin registration — only add plugins whose required inputs exist.
 const hasTsconfig = existsSync(resolve(targetDir, "tsconfig.json"));
@@ -318,7 +333,11 @@ const filteredCategories = declaredCategories
   .filter((cat) => cat.refs.length > 0);
 
 export default {
-  persist: { outputDir: resolve(toolRoot, "reports") },
+  // Reports land in the TARGET repo's reports/ dir, not the tool's own
+  // install dir. When a user runs `code-smells` from /path/to/their/repo,
+  // they expect /path/to/their/repo/reports/report.{json,md} — not a
+  // file inside ~/.npm/_npx/<hash>/node_modules/code-smells/reports.
+  persist: { outputDir: resolve(targetDir, "reports") },
   plugins: resolvedPlugins,
   categories: filteredCategories,
 };
