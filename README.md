@@ -5,20 +5,27 @@
 
 **A curated, research-backed static-analysis tool for React/TypeScript repos.** Thin wrapper over [code-pushup](https://github.com/code-pushup/cli) with opinionated defaults — hook overload, inline props, fan-out coupling, hidden temporal coupling ([Tornhill](https://pragprog.com/titles/atevol/software-design-x-rays/)), cross-team ownership ([Nagappan 2007](https://www.microsoft.com/en-us/research/publication/the-influence-of-organizational-structure-on-software-quality-an-empirical-case-study/)), and more. Zero setup against any TS/React repo.
 
+`cd` into the repo you want to scan, then run:
+
 ```bash
-cd /path/to/your/repo
 npx code-smells
-# Reports land in ./reports/report.{json,md}
 ```
 
-Or install globally:
+Reports land in `./reports/report.{json,md}`. Requires Node.js 18+ and git.
+
+### Or install globally
 
 ```bash
 npm install -g code-smells
-cd /path/to/your/repo && code-smells
 ```
 
-Requires Node.js 18+ and git.
+Worth doing if you run the tool more than occasionally:
+
+- **Faster startup** — skips npx's package-resolution step (a few seconds saved per run; adds up in CI or across a sweep of many repos)
+- **Offline after first install** — npx requires network to check the registry each run unless you pin `@x.y.z` exactly
+- **Pinned version you control** — no surprise patch-version bumps the next time you run
+- **Shell tab completion** works out of the box; `which code-smells` resolves
+- **No `npx` prefix** — just `code-smells` from anywhere in your shell
 
 ## What you get
 
@@ -69,14 +76,13 @@ ESLint gives you rule-by-rule violation counts. This gives you:
 
 ### Single-package repo
 
-`cd` into it and run:
+From inside the repo:
 
 ```bash
-cd /path/to/repo
 npx code-smells
 ```
 
-Defaults — `src/**/*.{ts,tsx}` source glob, `src/` as the dependency-cruiser entry. Override either via env var when needed:
+Defaults: `src/**/*.{ts,tsx}` source glob, `src/` as the dependency-cruiser entry. Override either via env var when needed:
 
 ```bash
 CP_PATTERNS='src/js/**/*.{ts,tsx}' CP_ENTRY='src/js' npx code-smells
@@ -84,10 +90,9 @@ CP_PATTERNS='src/js/**/*.{ts,tsx}' CP_ENTRY='src/js' npx code-smells
 
 ### Monorepo (yarn / pnpm / npm workspaces)
 
-Auto-detects `plugins/<ws>/src`, `libs/<ws>/src`, `packages/<ws>/src` layouts:
+Auto-detects `plugins/<ws>/src`, `libs/<ws>/src`, `packages/<ws>/src` layouts. From the monorepo root:
 
 ```bash
-cd /path/to/monorepo
 CP_PATTERNS='{plugins,libs,packages}/*/src/**/*.{ts,tsx}' npx code-smells
 ```
 
@@ -95,7 +100,7 @@ If the root `tsconfig.json` uses project references, they're expanded automatica
 
 ### Running from elsewhere (CI, scripts)
 
-If you can't `cd` first (e.g. a wrapper script), point `CP_TARGET` at the repo root:
+If you can't `cd` first, point `CP_TARGET` at the repo root:
 
 ```bash
 CP_TARGET=/path/to/repo npx code-smells
