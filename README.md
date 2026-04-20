@@ -153,12 +153,15 @@ Every custom file's JSDoc header explains **why** that specific wrapper exists â
 ## Development
 
 ```bash
-npm install                 # install deps
-npm run check               # run against the repo itself (cwd as target)
+git clone https://github.com/fyodoriv/code-smells && cd code-smells
+npm install
+node ./bin/code-smells.mjs  # run against cwd (the tool's own repo)
 npm run format              # prettier
 ```
 
-Follow-up work lives in [TASKS.md](./TASKS.md). Highlights: `publish-cli` (ship as `npx code-smells`), `tune-weights` (calibrate category weights against curated hotspots), `bundle-size-plugin`, `stylelint-plugin`, `evaluate-sonarcloud`.
+Releases are automated via [release-please](https://github.com/googleapis/release-please-action) â€” conventional commits on `main` accumulate into a release PR; when it merges, a GitHub release fires and `.github/workflows/publish.yml` publishes to npm with [provenance](https://docs.npmjs.com/generating-provenance-statements). To bootstrap: add an `NPM_TOKEN` repo secret with an npm automation/granular token scoped to the `code-smells` package.
+
+Follow-up work lives in [TASKS.md](./TASKS.md). Highlights: `tune-weights` (calibrate category weights against curated hotspots), `bundle-size-plugin`, `stylelint-plugin`, `evaluate-sonarcloud`.
 
 ## License
 

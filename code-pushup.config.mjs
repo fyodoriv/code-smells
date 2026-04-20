@@ -65,10 +65,17 @@ const patterns = process.env.CP_PATTERNS ?? "src/**/*.{ts,tsx}";
 
 // Conditional plugin registration — only add plugins whose required inputs exist.
 const hasTsconfig = existsSync(resolve(targetDir, "tsconfig.json"));
-const hasLockfile =
-  existsSync(resolve(targetDir, "yarn.lock")) ||
-  existsSync(resolve(targetDir, "package-lock.json")) ||
-  existsSync(resolve(targetDir, "pnpm-lock.yaml"));
+// Detect the target's package manager explicitly. The js-packages plugin's
+// auto-derivation walks up from cwd, which breaks when the CLI is invoked
+// from elsewhere (e.g. `npx code-smells` in /tmp against a yarn target).
+const detectedPackageManager = existsSync(resolve(targetDir, "pnpm-lock.yaml"))
+  ? "pnpm"
+  : existsSync(resolve(targetDir, "yarn.lock"))
+    ? "yarn-classic"
+    : existsSync(resolve(targetDir, "package-lock.json"))
+      ? "npm"
+      : null;
+const hasLockfile = detectedPackageManager !== null;
 
 // Coverage plugin: look at CP_COVERAGE_LCOV env or common default paths.
 const coverageLcovPath =
@@ -128,7 +135,12 @@ if (hasTsconfig) {
   officialPlugins.push(typescriptPlugin({ tsconfig: tsconfigs }));
 }
 if (hasLockfile) {
-  officialPlugins.push(jsPackagesPlugin());
+  officialPlugins.push(
+    jsPackagesPlugin({
+      packageManager: detectedPackageManager,
+      packageJsonPath: resolve(targetDir, "package.json"),
+    })
+  );
 }
 officialPlugins.push(jsdocsPlugin({ patterns: [resolve(targetDir, patterns)] }));
 if (lcovPath) {
@@ -245,8 +257,41 @@ const declaredCategories = [
 ];
 
 const registeredSlugs = new Set(resolvedPlugins.map((p) => p.slug));
+// Build a set of (plugin-slug, audit-slug) pairs that the resolved plugins
+// actually expose. The filter below uses this to drop category refs that
+// point at audits which the current plugin lineup didn't produce — e.g.
+// npm-audit-prod disappears and yarn-classic-audit-prod appears when the
+// target uses Yarn instead of npm.
+const registeredAudits = new Set();
+for (const plugin of resolvedPlugins) {
+  for (const audit of plugin.audits ?? []) {
+    registeredAudits.add(`${plugin.slug}::${audit.slug}`);
+  }
+}
+
+// Build the security category's refs dynamically so the package-manager
+// prefix on js-packages audit slugs matches what the plugin actually emits.
+const pmPrefix = detectedPackageManager === "yarn-classic"
+  ? "yarn-classic"
+  : detectedPackageManager === "yarn-modern"
+    ? "yarn-modern"
+    : detectedPackageManager === "pnpm"
+      ? "pnpm"
+      : "npm";
+const securityRefs = [
+  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-audit-prod`, weight: 3 },
+  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-audit-dev`, weight: 2 },
+  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-outdated-prod`, weight: 1 },
+  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-outdated-dev`, weight: 0 },
+];
+
 const filteredCategories = declaredCategories
-  .map((cat) => ({ ...cat, refs: cat.refs.filter((r) => registeredSlugs.has(r.plugin)) }))
+  .map((cat) => {
+    // Swap the security refs in dynamically if this is the security category.
+    const refs = cat.slug === "security" ? securityRefs : cat.refs;
+    // Drop refs whose plugin isn't registered, OR whose audit isn't exposed.
+    return { ...cat, refs: refs.filter((r) => registeredAudits.has(`${r.plugin}::${r.slug}`)) };
+  })
   .filter((cat) => cat.refs.length > 0);
 
 export default {

@@ -89,8 +89,6 @@ refresh cadence).
 
 ### Distribution & docs
 
-- [ ] Publish as a standalone CLI (npx-runnable)
-  - **ID**: publish-cli
-  - **Tags**: distribution
-  - **Files**: `package.json`, `.github/workflows/publish.yml`, `LICENSE`
-  - **Acceptance**: `npx code-smells --target /path` works from a fresh shell.
+(nothing open — `publish-cli` shipped 2026-04-20: the tool is now
+runnable via `npx code-smells` and releases are automated via
+release-please + a GitHub Actions publish workflow with npm provenance.)
