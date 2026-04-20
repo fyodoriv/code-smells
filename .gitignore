@@ -1,0 +1,20 @@
+node_modules/
+.code-pushup/
+*.log
+.DS_Store
+.idea/
+
+# Machine-generated report outputs (JSON + default MD) are large and
+# regenerated on every run — ignore those. But keep tracked the
+# human-written calibration / impact-correlation reports that document
+# specific target repos over time.
+reports/report.json
+reports/report.md
+reports/depcruise.json
+reports/*.json
+reports/.depcruise/
+reports/.jscpd/
+
+# TASKS.md is ignored globally; un-ignore it for this project so the task
+# queue is tracked alongside the code.
+!TASKS.md

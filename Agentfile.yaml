@@ -1,0 +1,11 @@
+# Agentfile — code-smells agent configuration
+# Run `agentbrew sync` to deploy to all agents.
+#
+# Scope: this is a standalone static-analysis tool for React/TypeScript
+# repos. The MCP servers below are chosen for this workflow — no
+# general-purpose servers like `github` since this tool does not touch
+# GitHub directly.
+
+mcp:
+  - context7               # Library docs (code-pushup, ESLint, dep-cruiser, etc.)
+  - tasks-mcp              # TASKS.md workflow for this repo's own backlog
