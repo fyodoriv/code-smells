@@ -6,9 +6,16 @@
 **A curated, research-backed static-analysis tool for React/TypeScript repos.** Thin wrapper over [code-pushup](https://github.com/code-pushup/cli) with opinionated defaults — hook overload, inline props, fan-out coupling, hidden temporal coupling ([Tornhill](https://pragprog.com/titles/atevol/software-design-x-rays/)), cross-team ownership ([Nagappan 2007](https://www.microsoft.com/en-us/research/publication/the-influence-of-organizational-structure-on-software-quality-an-empirical-case-study/)), and more. Zero setup against any TS/React repo.
 
 ```bash
-git clone https://github.com/fyodoriv/code-smells && cd code-smells && npm install
-CP_TARGET=/path/to/your/repo npm run check
-# Reports land in reports/report.{json,md}
+cd /path/to/your/repo
+npx code-smells
+# Reports land in ./reports/report.{json,md}
+```
+
+Or install globally:
+
+```bash
+npm install -g code-smells
+cd /path/to/your/repo && code-smells
 ```
 
 Requires Node.js 18+ and git.
@@ -62,11 +69,17 @@ ESLint gives you rule-by-rule violation counts. This gives you:
 
 ### Single-package repo
 
+`cd` into it and run:
+
 ```bash
-CP_TARGET=/path/to/repo \
-  CP_PATTERNS="src/**/*.{ts,tsx}" \
-  CP_ENTRY="src" \
-  npm run check
+cd /path/to/repo
+npx code-smells
+```
+
+Defaults — `src/**/*.{ts,tsx}` source glob, `src/` as the dependency-cruiser entry. Override either via env var when needed:
+
+```bash
+CP_PATTERNS='src/js/**/*.{ts,tsx}' CP_ENTRY='src/js' npx code-smells
 ```
 
 ### Monorepo (yarn / pnpm / npm workspaces)
@@ -74,12 +87,19 @@ CP_TARGET=/path/to/repo \
 Auto-detects `plugins/<ws>/src`, `libs/<ws>/src`, `packages/<ws>/src` layouts:
 
 ```bash
-CP_TARGET=/path/to/monorepo \
-  CP_PATTERNS='{plugins,libs,packages}/*/src/**/*.{ts,tsx}' \
-  npm run check
+cd /path/to/monorepo
+CP_PATTERNS='{plugins,libs,packages}/*/src/**/*.{ts,tsx}' npx code-smells
 ```
 
 If the root `tsconfig.json` uses project references, they're expanded automatically into per-workspace tsconfigs for the TypeScript plugin.
+
+### Running from elsewhere (CI, scripts)
+
+If you can't `cd` first (e.g. a wrapper script), point `CP_TARGET` at the repo root:
+
+```bash
+CP_TARGET=/path/to/repo npx code-smells
+```
 
 ### Env vars
 
