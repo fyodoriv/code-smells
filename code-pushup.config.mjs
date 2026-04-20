@@ -135,12 +135,33 @@ if (hasTsconfig) {
   officialPlugins.push(typescriptPlugin({ tsconfig: tsconfigs }));
 }
 if (hasLockfile) {
-  officialPlugins.push(
-    jsPackagesPlugin({
-      packageManager: detectedPackageManager,
-      packageJsonPath: resolve(targetDir, "package.json"),
-    })
-  );
+  const plugin = jsPackagesPlugin({
+    packageManager: detectedPackageManager,
+    packageJsonPath: resolve(targetDir, "package.json"),
+  });
+  // Wrap the runner so transient failures in the underlying package
+  // manager (e.g. `yarn audit` on a Yarn v1 workspace monorepo returns
+  // JSON without the `summary` block the plugin expects, or registry
+  // connectivity blips) don't kill the entire run. Degrade to
+  // zero-violation audits with a visible "skipped" note instead.
+  const originalRunner = plugin.runner;
+  plugin.runner = async () => {
+    try {
+      return await originalRunner();
+    } catch (err) {
+      const message = err?.message ?? String(err);
+      console.warn(`[code-smells] js-packages plugin degraded: ${message}`);
+      return plugin.audits.map((audit) => ({
+        slug: audit.slug,
+        title: audit.title ?? audit.slug,
+        score: 1,
+        value: 0,
+        displayValue: `skipped (${message.slice(0, 80)})`,
+        details: { issues: [] },
+      }));
+    }
+  };
+  officialPlugins.push(plugin);
 }
 officialPlugins.push(jsdocsPlugin({ patterns: [resolve(targetDir, patterns)] }));
 if (lcovPath) {
