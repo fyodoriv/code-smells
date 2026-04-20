@@ -135,7 +135,10 @@ if (hasTsconfig) {
   officialPlugins.push(typescriptPlugin({ tsconfig: tsconfigs }));
 }
 if (hasLockfile) {
-  const plugin = jsPackagesPlugin({
+  // jsPackagesPlugin is async — await before mutating .runner, otherwise
+  // we're mutating the Promise's own properties (which get discarded when
+  // the Promise resolves) and the wrap never takes effect.
+  const plugin = await jsPackagesPlugin({
     packageManager: detectedPackageManager,
     packageJsonPath: resolve(targetDir, "package.json"),
   });
@@ -153,7 +156,6 @@ if (hasLockfile) {
       console.warn(`[code-smells] js-packages plugin degraded: ${message}`);
       return plugin.audits.map((audit) => ({
         slug: audit.slug,
-        title: audit.title ?? audit.slug,
         score: 1,
         value: 0,
         displayValue: `skipped (${message.slice(0, 80)})`,
