@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.1...code-smells-v0.2.2) (2026-04-20)
+
+
+### Documentation
+
+* default README to cd-then-run flow ([34db4a2](https://github.com/fyodoriv/code-smells/commit/34db4a265b4e0ca9ccdad23092b94ab94602cecd))
+
 ## [0.2.1](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.0...code-smells-v0.2.1) (2026-04-20)
 
 
