@@ -75,13 +75,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Upgrade to npm 11+ for OIDC trusted publishing
-        # npm 11+ has first-class Trusted Publishing support and issues
-        # the OIDC-based publish without needing NODE_AUTH_TOKEN. Node 22
-        # ships npm 10.x; bumping explicitly here pins a known-good
-        # version without depending on runner-image npm updates.
-        run: npm install -g npm@latest
-
       - name: Install dependencies
         run: npm ci
 
@@ -97,4 +90,11 @@ jobs:
         #   → org: fyodoriv, repo: code-smells, workflow: release-please.yml
         # 2FA on the npm account is a non-issue with this flow: there's no
         # credential for 2FA to protect; GitHub's OIDC identity is the auth.
+        #
+        # IMPORTANT: we don't pass `registry-url` to setup-node because that
+        # writes `_authToken=${NODE_AUTH_TOKEN}` into .npmrc. Without a token
+        # set, that expands to the literal sentinel string and npm CLI
+        # tries to use it as auth — which fails with a misleading 404. By
+        # leaving .npmrc untouched, npm's trusted-publishing OIDC flow
+        # takes over automatically.
         run: npm publish --provenance --access public
