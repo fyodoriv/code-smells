@@ -7,8 +7,7 @@
   "license": "MIT",
   "scripts": {
     "check": "CP_TARGET=${CP_TARGET:-$PWD} npx code-pushup collect --persist.outputDir=reports --persist.format=json --persist.format=md",
-    "format": "prettier --write .",
-    "test": "node --test lib/**/*.spec.mjs"
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@code-pushup/cli": "0.126.2",
