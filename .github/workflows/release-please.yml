@@ -84,7 +84,11 @@ jobs:
           chmod +x ./bin/code-smells.mjs
           node -e "require('./package.json').bin['code-smells']"
 
-      - name: Publish to npm with provenance
+      - name: Publish to npm with provenance (Trusted Publishing / OIDC)
+        # Uses npm's OIDC trusted publisher flow — no NPM_TOKEN required.
+        # Requires a one-time setup on npmjs.com:
+        #   package settings → Trusted Publisher → GitHub Actions
+        #   → org: fyodoriv, repo: code-smells, workflow: release-please.yml
+        # 2FA on the npm account is a non-issue with this flow: there's no
+        # credential for 2FA to protect; GitHub's OIDC identity is the auth.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
