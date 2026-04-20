@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.6...code-smells-v0.2.7) (2026-04-20)
+
+
+### Features
+
+* reports land in OS cache dir, print clickable file:// URL ([4c9f3a2](https://github.com/fyodoriv/code-smells/commit/4c9f3a2752ec5e377b87ad8cdd5d7b969eb548b7))
+
 ## [0.2.6](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.5...code-smells-v0.2.6) (2026-04-20)
 
 
