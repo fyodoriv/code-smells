@@ -12,10 +12,33 @@
  *   - unlisted-dependencies   — imports not declared in package.json
  */
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 
-const toolRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const require = createRequire(import.meta.url);
+
+/**
+ * Resolve `knip`'s executable JS file. knip's package.json uses an
+ * "exports" field that doesn't expose ./package.json as a subpath, so
+ * we can't `require.resolve("knip/package.json")`. Walk up from the
+ * resolved main entry instead to find the package root.
+ */
+const resolveKnipBinJs = () => {
+  let dir = dirname(require.resolve("knip"));
+  while (dir !== dirname(dir)) {
+    const pkgPath = join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      if (pkg.name === "knip") {
+        const binEntry = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.knip;
+        return resolve(dir, binEntry);
+      }
+    }
+    dir = dirname(dir);
+  }
+  throw new Error("Could not locate knip package root");
+};
 
 /**
  * @param {{ targetDir: string }} options
@@ -35,14 +58,14 @@ export default function knipPlugin({ targetDir }) {
       { slug: "unlisted-dependencies", title: "Unlisted dependencies" },
     ],
     runner: async () => {
-      const bin = join(toolRoot, "node_modules/.bin/knip");
+      const binJs = resolveKnipBinJs();
       const result = spawnSync(
-        bin,
-        ["--reporter", "json", "--no-exit-code"],
+        process.execPath,
+        [binJs, "--reporter", "json", "--no-exit-code"],
         { cwd: targetDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
       );
       // knip exits 0 with --no-exit-code. stdout is JSON.
-      if (!result.stdout.trim()) {
+      if (!result.stdout?.trim()) {
         // Most likely no knip config + auto-detection found nothing useful.
         // Return empty audits rather than failing.
         return [

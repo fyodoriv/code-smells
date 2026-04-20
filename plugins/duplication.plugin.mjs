@@ -9,15 +9,40 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
 const pluginRoot = dirname(fileURLToPath(import.meta.url));
 const toolRoot = dirname(pluginRoot);
 
+/**
+ * Resolve jscpd's executable JS file. jscpd's package.json uses an
+ * "exports" field that doesn't expose ./package.json as a subpath, so
+ * we can't `require.resolve("jscpd/package.json")`. Walk up from the
+ * resolved main entry instead to find the package root.
+ */
+const resolveJscpdBinJs = () => {
+  let dir = dirname(require.resolve("jscpd"));
+  while (dir !== dirname(dir)) {
+    const pkgPath = join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      if (pkg.name === "jscpd") {
+        const binEntry = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.jscpd;
+        return resolve(dir, binEntry);
+      }
+    }
+    dir = dirname(dir);
+  }
+  throw new Error("Could not locate jscpd package root");
+};
+
 const runJscpd = ({ targetDir, patterns, ignore, outputDir }) => {
-  const bin = join(toolRoot, "node_modules/.bin/jscpd");
+  const binJs = resolveJscpdBinJs();
   const args = [
+    binJs,
     "--silent",
     "--reporters",
     "json",
@@ -30,7 +55,7 @@ const runJscpd = ({ targetDir, patterns, ignore, outputDir }) => {
     args.push("--ignore", ignore.join(","));
   }
   args.push(".");
-  spawnSync(bin, args, {
+  spawnSync(process.execPath, args, {
     cwd: targetDir,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
