@@ -85,7 +85,7 @@ If the root `tsconfig.json` uses project references, they're expanded automatica
 
 | Var | Default | Purpose |
 |---|---|---|
-| `CP_TARGET` | cwd | Target repo to analyze |
+| `CP_TARGET` | current directory | Override the repo under analysis. Useful in CI / wrappers where you can't `cd` first. |
 | `CP_PATTERNS` | `src/**/*.{ts,tsx}` | Glob for source files (ESLint, jsdocs, type-coverage) |
 | `CP_ENTRY` | `src` (auto-detects workspaces in monorepos) | dependency-cruiser entry point(s); comma-separated list |
 | `CP_TSCONFIG` | auto-detected from `references` | Explicit tsconfig path(s), comma-separated |
