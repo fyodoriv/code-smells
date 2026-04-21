@@ -2,6 +2,40 @@
 
 ## P0
 
+- [ ] Enforce `docs/audit-review.md` stays in sync with emitted audits
+  - **ID**: audit-review-lint
+  - **Tags**: documentation, ci, drift-prevention
+  - **Details**: `docs/audit-review.md` is the canonical decision log
+    for every audit. Today the doc ↔ code link is manual — someone
+    can add/remove an audit without touching the review. We need a CI
+    check that fails when they drift.
+    Implementation outline:
+    1. Script (`scripts/check-audit-review.mjs`) that imports the
+       compiled `code-pushup.config` from the target, walks `plugins`
+       and `categories` to collect the set of emitted audit slugs
+       (including pm-aware slugs like `{npm,yarn-classic,pnpm}-audit-
+       prod`), parses `docs/audit-review.md` for rows (stripping the
+       `{pm}` placeholder), and diffs.
+    2. Fail with a clear message listing (a) audits emitted but not
+       documented, (b) audits documented but not emitted (moved to
+       "Previously emitted but dropped" section required).
+    3. Wire into `.github/workflows/ci.yml` as a step after tests.
+    4. Include a pre-commit hook option (husky or simple
+       `npm run check:audit-review`) so contributors catch drift
+       locally.
+  - **Files**: `scripts/check-audit-review.mjs` (new), `.github/
+    workflows/ci.yml` (add step), `package.json` (add script),
+    `docs/audit-review.md` (possible minor formatting to make it
+    machine-parseable)
+  - **Acceptance**:
+    - CI fails when an audit is added to `code-pushup.config.ts` but
+      no row exists in `docs/audit-review.md`
+    - CI fails when an audit row in `docs/audit-review.md` references
+      a slug no plugin emits
+    - The check runs in <5s
+    - Local developer can run `npm run check:audit-review` to validate
+      before pushing
+
 - [ ] Document every warning/check with its reasoning
   - **ID**: document-audit-reasoning
   - **Tags**: documentation, ux, trust
@@ -11,11 +45,14 @@
     description that barely says what rule fired. Users seeing a 500-row
     report can't triage because they don't know which findings actually
     matter.
-    **Partial progress (Apr 2026):** `docs/audit-review.md` contains the
-    research-backed review (What/Why/When-to-fix/FP risk) for all scored
-    audits. What's still missing is (a) per-audit `docs/audits/<slug>.md`
-    explainers the report can link to, and (b) the CI check that fails
-    when new audits ship without docs.
+    **Progress (Apr 2026):** `docs/audit-review.md` is the living
+    decision log — covers What/Why/Decision/Weight for every scored
+    audit and every previously-emitted-but-dropped audit. See
+    `audit-review-lint` above for the drift-prevention check.
+    What's still missing is (a) per-audit `docs/audits/<slug>.md`
+    explainers the report's audit description field can link to, so
+    clicking through in `report.md` jumps to a full "what this flags /
+    how to fix it" page.
     Deliverables:
     1. Enumerate every audit across all plugins:
        - ESLint rules in `eslint.target-rules.mjs` (~40+ rules including
@@ -66,11 +103,116 @@
 
 ## P1
 
-(none — the P1 research/calibration work has shipped. See git log for
-what was delivered: temporal-coupling, team-ownership, domain-boundaries,
-monorepo support, full README/ADR.)
+- [ ] Migrate source tree from `.mjs` to strict TypeScript
+  - **ID**: migrate-to-typescript
+  - **Tags**: dogfooding, type-safety, refactor
+  - **Details**: code-smells scores "Type Safety" as 1 of 8 categories
+    but is itself written in `.mjs` with JSDoc-only typing. Migration
+    started on branch `refactor/migrate-to-typescript` (in-progress WIP
+    is preserved in a git stash on that branch — `git stash list` to
+    see it). The branch has:
+    - Files moved from repo root to `src/**/*.ts`
+    - All `.mjs` import specifiers rewritten to `.js` (correct for
+      TS+NodeNext module resolution)
+    - `tsconfig.json` created at repo root with strict mode, NodeNext,
+      `rootDir: ./src`, `outDir: ./dist`, full strict flags
+    - `.gitignore` updated to include `dist/` and `*.tsbuildinfo`
+    - `bin/code-smells.mjs` replaced with a 2-line shebang shim that
+      imports `run()` from `dist/bin/main.js`
+    - `@types/node` added
+    Still TODO:
+    1. Add strict types to every `src/**/*.ts` file — plugins use
+       `import('@code-pushup/models').PluginConfig`, ESLint custom
+       rules use `Rule.RuleModule`, config uses `CoreConfig`
+    2. Deal with untyped deps (eslint-plugin-jsx-a11y,
+       eslint-plugin-react-perf, eslint-plugin-formatjs,
+       eslint-plugin-testing-library, eslint-plugin-sonarjs) — either
+       install `@types/<name>` or add ambient declarations
+    3. Convert test files `.spec.mjs` → `.spec.ts` and update imports
+       to point at `../src/...` paths
+    4. Update `package.json` — add `main`, `types`, `prepublishOnly:
+       npm run build`, new `build` and `typecheck` scripts
+    5. Update `vitest.config.mjs` coverage `include: ["src/**/*.ts"]`
+    6. Update `.github/workflows/ci.yml` to add `tsc --build` step
+    7. Update publish workflow to build before publishing (shipped
+       tarball contains `dist/` not `src/`)
+    8. Update `examples/workflows/code-smells.yml` references
+    9. Verify `npx code-smells` on the tool's own repo still works
+       end-to-end
+  - **Files**: `src/**/*.ts` (exists, needs types), `tsconfig.json`
+    (exists, may need tightening), `package.json`, `vitest.config.mjs`,
+    `.github/workflows/ci.yml`, `.github/workflows/release-please.yml`,
+    test files `.spec.mjs` → `.spec.ts`
+  - **Acceptance**:
+    - `npx tsc --build` exits 0 with no errors on strict config
+    - `npm test` green (202+ tests)
+    - `npm run check` (full `npx code-smells` self-run) completes
+    - CI runs typecheck step and it passes
+    - Published tarball contains `dist/` and the bin shim works
+    - No `any` in source (verify with `grep -r ': any' src/` = empty)
+
+(prior P1 research/calibration work has shipped — see git log:
+temporal-coupling, team-ownership, domain-boundaries, monorepo support,
+audit cleanup review PR #11.)
 
 ## P2
+
+- [ ] Distribute code-smells as a CI check across personal repos
+  - **ID**: distribute-to-personal-repos
+  - **Tags**: adoption, distribution
+  - **Details**: Goal is to have code-smells running as a PR-gating
+    check on every personal project. Path to pick among:
+    1. **Reusable workflow** in this repo that target repos reference
+       via `uses: fyodoriv/code-smells/.github/workflows/audit.yml@v1`
+       — changes to audit config propagate on next run
+    2. **Composite action** at repo root (`action.yml`) — `uses:
+       fyodoriv/code-smells@v1` inside any job
+    3. **Drop-in template** copied per repo (what
+       `examples/workflows/code-smells.yml` already tries to be)
+    User has a curated list of target repos they'll provide when
+    starting this.
+  - **Files**: `.github/workflows/audit.yml` (new reusable workflow) OR
+    `action.yml` (new composite action), scripts to bulk-open PRs in
+    target repos if we automate rollout
+  - **Acceptance**:
+    - Decision recorded (reusable workflow vs composite action vs
+      per-repo template)
+    - Working example from at least one target repo that posts a
+      sticky summary comment on PRs and fails on category regressions
+
+- [ ] Trim and modernize `examples/workflows/code-smells.yml`
+  - **ID**: trim-example-workflow
+  - **Tags**: cleanup, ci-template
+  - **Details**: Current template is ~139 lines and still references
+    the pre-publish `/tmp/code-smells` vendoring approach. Now that
+    `npx code-smells` is published (0.2.11+), the workflow can shrink
+    to ~40 lines. Also has a trailing-fragment bug on lines 137-139
+    (duplicate `recreate: true` + `baseline).` orphan). Gets done as
+    part of `distribute-to-personal-repos` or standalone.
+  - **Files**: `examples/workflows/code-smells.yml`,
+    `docs/ci-integration.md`
+  - **Acceptance**:
+    - Workflow uses `npx code-smells` (no /tmp clone)
+    - No orphaned fragment at the end of the file
+    - `docs/ci-integration.md` updated to match
+
+- [ ] Guard against npm 11's cross-platform optional-dep pruning
+  - **ID**: npm11-lockfile-platform-drift
+  - **Tags**: ci, ops, papercut
+  - **Details**: npm 11 on macOS arm64 prunes `@esbuild/*` platform-
+    specific optional deps from `package-lock.json` on every
+    `npm install`, breaking `npm ci` on Linux CI. Hit this on PR #11
+    — had to surgical-edit the lockfile via a Node script to remove
+    only the jsdocs+ts-morph chain without dropping platform entries.
+    Options:
+    1. Pin npm to 10.x in the dev environment via an `.nvmrc` + `npm
+       -g install npm@10` note in CONTRIBUTING
+    2. Use a Docker Linux container for lockfile-regenerating commands
+    3. Add a pre-push / pre-commit check that verifies every
+       `@esbuild/*` platform entry is present in the lockfile
+  - **Acceptance**:
+    - Either a documented workaround in README/CONTRIBUTING, or an
+      automated check that catches the drift before push
 
 ## P3
 
@@ -79,14 +221,13 @@ monorepo support, full README/ADR.)
 ### CI integration
 
 Baseline + delta enforcement, PR summary comment, and PR-diff-only
-reporting are all bundled as of 2026-04-20:
-
-- Workflow template: `examples/workflows/code-smells.yml`
-- Setup guide: `docs/ci-integration.md`
-
-See also ADR-like reasoning in that doc for the Tricorder-inspired
-tradeoffs (delta > absolute thresholds, summary > per-line, baseline
-refresh cadence).
+reporting all shipped 2026-04-20. Workflow template at
+`examples/workflows/code-smells.yml`; setup guide at
+`docs/ci-integration.md` with ADR-like reasoning for the Tricorder-
+inspired tradeoffs (delta > absolute thresholds, summary > per-line,
+baseline refresh cadence). Follow-up work tracked under
+`trim-example-workflow` in P2 and `distribute-to-personal-repos` in
+P2.
 
 ### Additional ESLint rules via @code-pushup/eslint-plugin
 

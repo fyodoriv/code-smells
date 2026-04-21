@@ -1,162 +1,184 @@
-# Audit review — April 2026
+# Audit review
 
-> A one-pass review of every audit code-smells emits, against the
-> rubric in `VISION.md`: **research-backed, <10% FP, actionable**.
+> Living document. One entry per audit code-smells emits, judged against
+> the VISION.md rubric (**research-backed, <10% FP, actionable**) with
+> the decision and rationale recorded.
 >
-> Status legend:
-> - ✅ **Keep** — solid signal, well-researched, low FP, actionable
-> - ⚠ **Tune** — signal is valid but thresholds, weight, or scope need work
-> - ❌ **Drop** — noisy, redundant, or research-discredited
-> - 🔧 **Structural** — audit emits but isn't in a category (doesn't score)
+> **Maintenance rule:** every time an audit is added, removed, or its
+> threshold/weight is tuned, this file and `code-pushup.config.ts/mjs`
+> must change in the same commit. A CI check enforces this (see
+> TASKS.md `audit-review-lint`). If you're adding an audit, add a row
+> here with your decision recorded up front.
+>
+> **Status legend:**
+> - ✅ **Kept** — solid signal, well-researched, low FP, actionable
+> - ⚙ **Tuned** — signal is valid, threshold/weight/scope adjusted
+> - ❌ **Dropped** — noisy, redundant, or research-discredited
+> - 🔧 **Structural** — audit emits but doesn't score (fold into a
+>   category or drop)
 
-Summary: **58 audits total, 34 scored, 24 unscored.** 31 keep as-is,
-10 tune, 4 drop, 2 structural fixes.
+---
+
+## Decision log — April 2026
+
+First comprehensive review. **58 audits emitted, 34 previously scored,
+24 previously unscored.** Applied in [PR #11](https://github.com/fyodoriv/code-smells/pull/11).
+
+### Headline changes
+
+- **Dropped** `sonarjs/cyclomatic-complexity` (redundant with cognitive),
+  `react/jsx-no-bind` (redundant with react-perf), `npm-outdated-dev`
+  (was weight 0), and the entire `@code-pushup/jsdocs-plugin` (Steidl
+  2013 ICSM: comment density has no correlation with defect rate).
+- **Tuned** `author-dispersion/bus-factor` to gate on ≥2 distinct
+  authors per file (inverts on solo repos), `react/no-multi-comp` to
+  `ignoreStateless: true` (stop flagging legitimate helper components),
+  `js-packages/npm-audit-dev` weight 2 → 1 (dev-dep vulns are build-
+  pipeline-only risk).
+- **Added** two previously-missing scored categories:
+  **Accessibility** (11 jsx-a11y audits) and **Test Quality** (8
+  testing-library audits + 3 coverage audits). Before this pass, those
+  audits emitted without contributing to any category score.
+
+### Result
+
+- **Categories:** 6 → 8
+- **Scored audits:** 34 → 48 (TS + lockfile + lcov present)
+- **Unscored-but-emitted audits:** 24 → 0
 
 ---
 
 ## Category 1 · Component Health
 
-| Audit | Threshold | Verdict | Why |
+| Audit | Threshold | Decision | Why |
 |---|---|---|---|
-| `max-lines-per-function` | 150 lines | ✅ Keep | LOC/function is the only complexity metric that earns independent signal (El Emam 2001 IEEE TSE — most complexity metrics are ~80% LOC-correlated). Mechanical refactor target. |
-| `react/no-multi-comp` | `ignoreStateless: false` | ⚠ Tune | Signal is pragmatic ("god-file") but `ignoreStateless: false` fires on legitimate small helper components co-located by design. Flip to `ignoreStateless: true` default and only flag 2+ top-level exported components. |
-| `sonarjs/cognitive-complexity` | 15 | ✅ Keep | Campbell 2018 paper shows cognitive complexity correlates with developer maintainability ratings better than cyclomatic. SonarSource default threshold is 15. |
-| `sonarjs/cyclomatic-complexity` | 10 | ❌ Drop | Redundant with cognitive-complexity. McCabe 1976's metric is ~80% explained by LOC and cognitive strictly dominates it (Campbell 2018). Keeping both double-counts complexity in the category score. |
-| `code-smells/hook-count` | 10 | ✅ Keep | Pragmatic — hook proliferation is a genuine responsibility-overload signal. Threshold of 10 is forgiving enough to leave well-factored containers alone. |
-| `code-smells/use-effect-count` | 3 | ✅ Keep | Dan Abramov's "You Might Not Need an Effect" codifies the research: multiple effects usually encode hidden state machines. Threshold 3 is tight but the React team's own guidance backs it. |
-
-**Category-level change:** drop cyclomatic, re-weight cognitive → 4. Keep the rest.
-
----
+| `max-lines-per-function` | 150 | ✅ Kept | El Emam 2001 IEEE TSE: LOC/function is the only complexity metric that earns independent signal (~80% of others are LOC-correlated). Mechanical refactor target. |
+| `react/no-multi-comp` | `ignoreStateless: true` | ⚙ Tuned | Was `false`, firing on legitimate helper components. Now only flags files exporting multiple top-level components. |
+| `sonarjs/cognitive-complexity` | 15 | ✅ Kept | Campbell 2018 shows cognitive correlates with maintainability ratings better than cyclomatic. Default threshold. |
+| `sonarjs/cyclomatic-complexity` | — | ❌ Dropped | Redundant with cognitive (Campbell 2018: cognitive strictly dominates; McCabe 1976 is ~80% explained by LOC). |
+| `code-smells/hook-count` | 10 | ✅ Kept | Pragmatic responsibility-overload signal. Threshold permissive enough to leave well-factored containers alone. |
+| `code-smells/use-effect-count` | 3 | ✅ Kept | Dan Abramov's "You Might Not Need an Effect" codifies the research: multiple effects usually encode a hidden state machine. |
 
 ## Category 2 · Render Performance
 
-| Audit | Verdict | Why |
+| Audit | Decision | Why |
 |---|---|---|
-| `react-perf/jsx-no-new-function-as-prop` | ⚠ Tune | Signal is a **static proxy** for re-render cost (VISION's own framing is honest). In React 18+ with concurrent renderer and unmemoized children, inline functions rarely matter for end-user perf. High FP in practice. Keep as signal but drop weight. |
-| `react-perf/jsx-no-new-object-as-prop` | ⚠ Tune | Same. `style={{color: 'red'}}` is universally fine in practice. |
-| `react-perf/jsx-no-new-array-as-prop` | ⚠ Tune | Same. |
-| `react/jsx-no-bind` | ❌ Drop | **Redundant** with `react-perf/jsx-no-new-function-as-prop`. Same signal, two audits. |
-| `code-smells/unstable-selector-returns` | ✅ Keep | Highest-quality rule in this category. `useSelector(s => ({...}))` without `shallowEqual` is a **real** perf bug (guaranteed re-render every dispatch), not a "might be slow" proxy. Rule correctly exempts scalar returns and 2-arg forms. Near-zero FP. |
-
-**Category-level change:** drop jsx-no-bind, keep the three react-perf rules but collectively at lower weight than unstable-selector-returns (which is already weight 3, correct).
-
----
+| `react-perf/jsx-no-new-function-as-prop` | ✅ Kept (wt 1) | Honest "static proxy for re-render cost" per VISION. Real with `React.memo`, noisier with unmemoized children in React 18. Weight held at 1. |
+| `react-perf/jsx-no-new-object-as-prop` | ✅ Kept (wt 1) | Same rationale. |
+| `react-perf/jsx-no-new-array-as-prop` | ✅ Kept (wt 1) | Same rationale. |
+| `react/jsx-no-bind` | ❌ Dropped | Redundant with `react-perf/jsx-no-new-function-as-prop`. |
+| `code-smells/unstable-selector-returns` | ✅ Kept (wt 3) | Highest-quality rule here. Inline object returns from `useSelector` are a **real** perf bug (bypasses `===` check, guaranteed re-render every dispatch) — not a proxy. Near-zero FP. |
 
 ## Category 3 · Coupling
 
-| Audit | Verdict | Why |
+| Audit | Decision | Why |
 |---|---|---|
-| `coupling/high-fan-out` (threshold 15) | ✅ Keep | Import count is the cleanest JS/TS proxy for syntactic coupling (Chidamber & Kemerer 1994 CBO metric adapted). Threshold 15 is permissive enough to leave legit composition roots alone. |
-| `code-smells/domain-boundaries` (threshold 3) | ✅ Keep | Opt-in by design — empty categories map makes the rule a no-op. When a repo supplies a map, it catches genuine DDD bounded-context violations. Near-zero FP because the user controls the categories. |
-| `temporal-coupling/hidden-coupling` (30% co-change, 3+ pairs, 90d) | ✅ Keep | Tornhill "Software Design X-Rays" 2018 establishes temporal coupling as a defect predictor **independent** of static coupling. 20-file/commit cap and test exclusion already mitigate the main FP sources (bulk renames, formatter runs). No off-the-shelf Node tool — custom code is justified. |
-
-**Category-level change:** none. This is the best-curated category.
-
----
+| `coupling/high-fan-out` (15) | ✅ Kept | Import count is the cleanest JS/TS proxy for syntactic coupling (adapted from Chidamber & Kemerer 1994 CBO). |
+| `code-smells/domain-boundaries` (3, opt-in) | ✅ Kept | Empty-categories-map = no-op default. When configured, catches DDD bounded-context violations. User-supplied map → near-zero FP. |
+| `temporal-coupling/hidden-coupling` (30%, 3+ pairs, 90d) | ✅ Kept | Tornhill "Software Design X-Rays" 2018: temporal coupling predicts defects **independently** of static coupling. No off-the-shelf Node tool — custom code justified. |
 
 ## Category 4 · Type Safety
 
-| Audit | Verdict | Why |
+| Audit | Decision | Why |
 |---|---|---|
-| `typescript/semantic-errors` | ✅ Keep | Literal TSC errors. FP rate is zero by definition. |
-| `typescript/syntax-errors` | ✅ Keep | Same. |
-| `typescript/no-implicit-any-errors` | ✅ Keep | Same. Calls out specifically the `implicit any` diagnostic class. |
-| `typescript/configuration-errors` | ✅ Keep | Same. Weight 1 is right — these are rare but catch tsconfig drift. |
-| `type-coverage/type-coverage-percentage` | ✅ Keep | Catches inferred-any that `no-explicit-any` can't see (untyped `JSON.parse`, untyped catch blocks, untyped deps). Real signal beyond TSC. |
-
-**Category-level change:** none. All five keep as-is. Highest-confidence category.
-
----
+| `typescript/semantic-errors` | ✅ Kept (wt 3) | TSC diagnostics. Zero FP by definition. |
+| `typescript/syntax-errors` | ✅ Kept (wt 2) | Same. |
+| `typescript/no-implicit-any-errors` | ✅ Kept (wt 2) | Same. |
+| `typescript/configuration-errors` | ✅ Kept (wt 1) | Rare but catches tsconfig drift. |
+| `type-coverage/type-coverage-percentage` | ✅ Kept (wt 3) | Catches inferred-any that `no-explicit-any` can't see (untyped `JSON.parse`, untyped catch blocks, untyped deps). |
 
 ## Category 5 · Security & Dependencies
 
-| Audit | Weight | Verdict | Why |
+| Audit | Weight | Decision | Why |
 |---|---|---|---|
-| `js-packages/npm-audit-prod` | 3 | ✅ Keep | Real signal for prod-runtime vulns at CVSS ≥7. Noisy low-severity dev-only advisories are the critique, but weight-3 at prod-only scope is right. |
-| `js-packages/npm-audit-dev` | 2 | ⚠ Tune → 1 | Dev-dep vulns are build-pipeline-only risk. Weight 2 overstates the runtime impact vs. prod. Drop to 1. |
-| `js-packages/npm-outdated-prod` | 1 | ✅ Keep | Informational — outdated ≠ vulnerable. Weight 1 is exactly right. |
-| `js-packages/npm-outdated-dev` | 0 | ❌ Drop | Already weight 0, meaning it doesn't affect the score. Still pollutes the report. Either drop from the category entirely or delete the audit. |
+| `js-packages/{pm}-audit-prod` | 3 | ✅ Kept | Runtime-exploitable CVEs. Real signal at CVSS ≥7. |
+| `js-packages/{pm}-audit-dev` | 2 → 1 | ⚙ Tuned | Build-pipeline-only risk; shouldn't weigh as heavily as prod. |
+| `js-packages/{pm}-outdated-prod` | 1 | ✅ Kept | Informational — outdated ≠ vulnerable. |
+| `js-packages/{pm}-outdated-dev` | 0 | ❌ Dropped | Already weight 0, was just polluting the report. |
 
-**Category-level change:** drop npm-outdated-dev; rebalance npm-audit-dev weight.
+## Category 6 · Accessibility (new)
 
----
+Curated subset — the 11 rules that catch real user-facing issues.
+Noisy jsx-a11y rules on non-standard patterns intentionally excluded.
 
-## Category 6 · Maintainability
-
-| Audit | Verdict | Why |
+| Audit | Weight | Decision |
 |---|---|---|
-| `duplication/duplicated-lines` (jscpd, 500-line threshold) | ✅ Keep | Classic DRY violation. Test fixtures and generated code are the main FP sources but the 500-line total-budget threshold is forgiving. |
-| `churn/file-churn` (>5 in 90d) | ✅ Keep (info) | Tornhill: high-churn files are 3-5× defect-prone. Weight 1 is right — not actionable alone, useful in combination. |
-| `bug-fix-density/bug-fix-density` (>3 fix commits in 180d) | ✅ Keep | Direct lagging defect indicator. Weight 3 reflects its predictive value. Requires conventional-commits discipline. |
-| `author-dispersion/author-count` (>6 in 180d) | ✅ Keep | Nagappan 2007: >6 authors correlates with 2-3× defect rate. On solo repos this trivially scores 100, which is fine — the signal activates when the repo scales. |
-| `author-dispersion/bus-factor` (top author ≥80%, min 5 commits) | ❌ **Drop for personal projects** | **Inverts on solo repos.** Every file in a personal project has 100% one-author dominance; the audit reports "everything is bus-factor-risky" which is true but unactionable. For team repos the signal is OK but weak (bus-factor ≠ defect-density; Nagappan measured the opposite). |
-| `team-ownership/cross-team-churn` (>3 in 180d) | ✅ Keep | Nagappan 2007 direct measure: **strongest defect predictor in any static-analysis metric.** No-ops gracefully when no CODEOWNERS. Weight 3 is right. |
-| `team-ownership/team-count-per-file` (>2 other teams/commit) | ✅ Keep | Complementary signal to cross-team-churn; captures "cross-team blast radius" per commit. |
-| `knip/unused-files` | ✅ Keep | Dead code. Low-FP when knip is configured; plugin returns empty audits gracefully when no config. |
-| `knip/unused-exports` | ✅ Keep | Same. |
-| `knip/unresolved-imports` | ✅ Keep | These are literal build-breaking bugs. High signal. |
-| `knip/unlisted-dependencies` | ✅ Keep | Supply-chain risk — implicit deps. Weight 2 is correct. |
+| `jsx-a11y/alt-text` | 3 | ✅ Kept |
+| `jsx-a11y/interactive-supports-focus` | 3 | ✅ Kept |
+| `jsx-a11y/anchor-is-valid` | 2 | ✅ Kept |
+| `jsx-a11y/aria-props` | 2 | ✅ Kept |
+| `jsx-a11y/aria-role` | 2 | ✅ Kept |
+| `jsx-a11y/no-noninteractive-element-interactions` | 2 | ✅ Kept |
+| `jsx-a11y/role-has-required-aria-props` | 2 | ✅ Kept |
+| `jsx-a11y/role-supports-aria-props` | 2 | ✅ Kept |
+| `jsx-a11y/anchor-has-content` | 1 | ✅ Kept |
+| `jsx-a11y/aria-unsupported-elements` | 1 | ✅ Kept |
+| `jsx-a11y/no-autofocus` | 1 | ✅ Kept |
 
-**Category-level change:** drop or gate bus-factor. Everything else keeps.
+Prior state: all 11 emitted but weren't in any category → not scored.
+Absorbed into new category in PR #11.
 
----
+## Category 7 · Test Quality (new)
 
-## 🔧 Structural issues
+testing-library antipatterns + function/branch/line coverage.
 
-### Issue 1 — 24 audits emit but don't score
-
-The following plugins run and emit audits, but **none of their audits are referenced in any category**, so they don't contribute to the 0–100 category scores shown in the summary table:
-
-| Plugin | Audits emitted | Currently scored? |
+| Audit | Weight | Decision |
 |---|---|---|
-| `jsdocs` | 8 (classes, enums, functions, interfaces, methods, properties, types, variables) | ❌ None |
-| `jsx-a11y` via eslint | 11 (alt-text, anchor-has-content, anchor-is-valid, aria-props, aria-role, aria-unsupported-elements, interactive-supports-focus, no-autofocus, no-noninteractive-element-interactions, role-has-required-aria-props, role-supports-aria-props) | ❌ None |
-| `testing-library` via eslint | 8 (no-await-sync-queries, no-render-in-lifecycle, prefer-screen-queries, prefer-user-event, prefer-presence-queries, no-container, no-dom-import, no-unnecessary-act) | ❌ None |
-| `coverage` (lcov) | 1+ | ❌ None |
+| `testing-library/no-await-sync-queries` | 2 | ✅ Kept |
+| `testing-library/no-render-in-lifecycle` | 2 | ✅ Kept |
+| `testing-library/no-container` | 2 | ✅ Kept |
+| `testing-library/no-dom-import` | 2 | ✅ Kept |
+| `testing-library/prefer-screen-queries` | 1 | ✅ Kept |
+| `testing-library/prefer-user-event` | 1 | ✅ Kept |
+| `testing-library/prefer-presence-queries` | 1 | ✅ Kept |
+| `testing-library/no-unnecessary-act` | 1 | ✅ Kept |
+| `coverage/function-coverage` | 2 | ✅ Kept |
+| `coverage/branch-coverage` | 2 | ✅ Kept |
+| `coverage/line-coverage` | 1 | ✅ Kept |
 
-**Three ways to resolve:**
+Prior state: all 11 emitted but weren't in any category → not scored.
+Absorbed into new category in PR #11.
 
-1. **Add two new categories** — "Accessibility" (jsx-a11y) + "Test Quality" (testing-library, coverage). Drop JSDocs entirely (research says comment density doesn't correlate with defects — Steidl 2013 ICSM).
-2. **Fold into existing categories** — accessibility into Component Health, testing-library into Maintainability, coverage into Type Safety.
-3. **Suppress** — remove the plugins that don't score. Cleanest but loses the signal.
+## Category 8 · Maintainability
 
-**Recommendation:** Option 1 with JSDocs dropped. Two new categories ("Accessibility", "Test Quality") matches how the README frames the tool's scope.
-
-### Issue 2 — JSDocs coverage is research-discredited
-
-Steidl 2013 (ICSM) showed **no statistical correlation between comment density and bug density or maintainability.** The `@code-pushup/jsdocs-plugin` emits 8 sub-audits that together imply "document everything" is a goal. It isn't. Drop the plugin entirely; if per-public-API documentation coverage becomes important later, add it with scope (public exports only, not every variable).
-
-### Issue 3 — Redundant audits
-
-| Redundancy | Keep | Drop |
+| Audit | Decision | Why |
 |---|---|---|
-| Cyclomatic vs. cognitive complexity | `sonarjs/cognitive-complexity` | `sonarjs/cyclomatic-complexity` |
-| Inline function props | `react-perf/jsx-no-new-function-as-prop` | `react/jsx-no-bind` |
-| Outdated dev deps (weight 0) | — | `npm-outdated-dev` |
+| `duplication/duplicated-lines` (jscpd, 500-line budget) | ✅ Kept (wt 1) | Classic DRY smell. 500-line total budget is forgiving. |
+| `churn/file-churn` (>5 commits in 90d) | ✅ Kept (wt 1) | Tornhill: high-churn files are 3-5× defect-prone. Informational alone; useful combined. |
+| `bug-fix-density/bug-fix-density` (>3 fix/180d) | ✅ Kept (wt 3) | Direct lagging defect indicator. Requires conventional-commits discipline. |
+| `author-dispersion/author-count` (>6/180d) | ✅ Kept (wt 2) | Nagappan 2007: >6 authors correlates with 2-3× defect rate. |
+| `author-dispersion/bus-factor` (≥80% top share, min 5 commits, **≥2 distinct authors**) | ⚙ Tuned | Added `≥2 authors` gate in PR #12's neighborhood. On solo/personal repos every file had 100% one-author dominance by definition — flagging them all was unactionable noise. Team repos still get the signal. |
+| `team-ownership/cross-team-churn` (>3 multi-team/180d) | ✅ Kept (wt 3) | Nagappan 2007 direct measure — strongest defect predictor in static analysis. |
+| `team-ownership/team-count-per-file` (>2 other teams/commit) | ✅ Kept (wt 2) | Complement to cross-team-churn: per-commit cross-team blast radius. |
+| `knip/unused-files` | ✅ Kept (wt 1) | Dead code. |
+| `knip/unused-exports` | ✅ Kept (wt 1) | Dead code. |
+| `knip/unresolved-imports` | ✅ Kept (wt 2) | Literal build-breaking bugs. |
+| `knip/unlisted-dependencies` | ✅ Kept (wt 2) | Supply-chain risk. |
 
 ---
 
-## Summary of verdicts
+## Previously emitted but dropped
 
-| Category | Keep | Tune | Drop |
-|---|---|---|---|
-| Component Health | 5 | 1 (no-multi-comp) | 1 (cyclomatic) |
-| Render Performance | 1 | 3 (react-perf rules) | 1 (jsx-no-bind) |
-| Coupling | 3 | 0 | 0 |
-| Type Safety | 5 | 0 | 0 |
-| Security & Dependencies | 2 | 1 (npm-audit-dev weight) | 1 (npm-outdated-dev) |
-| Maintainability | 10 | 0 | 1 (bus-factor for solo repos) |
-| **Total (scored)** | **26** | **5** | **4** |
-| Unscored (structural) | — | — | 24 (fold into categories or drop) |
+- **`@code-pushup/jsdocs-plugin`** (8 sub-audits: classes, enums,
+  functions, interfaces, methods, properties, types, variables coverage)
+  — dropped entirely in PR #11. Steidl 2013 ICSM: no statistical
+  correlation between comment density and defect rate or
+  maintainability. If per-public-API documentation coverage matters
+  later, add it back scoped to public exports only (not every variable).
 
 ---
 
-## Open questions for Fyodor
+## How to maintain this doc
 
-1. **Bus-factor audit** — drop entirely, or keep behind a flag that requires >1 distinct author in the history? (Solo repos will always hit 100% dominance on every file.)
-2. **Accessibility as a scored category** — yes/no? You use jsx-a11y rules already; the question is whether to grade on them.
-3. **Test Quality as a scored category** — yes/no? Would fold testing-library + coverage in.
-4. **JSDocs plugin** — drop entirely, or keep as "informational, not scored" status quo?
-5. **React-perf trio (jsx-no-new-*-as-prop)** — keep at current weight, or reduce? My take: signal is real but FP-heavy; reduce each from weight 1 to weight 0.5 (not supported) or drop to 0.5 average weight equivalent by halving the category's share.
-6. **No-multi-comp threshold** — flip to `ignoreStateless: true`?
+1. **Adding an audit** — add a row to the appropriate category, record
+   the decision (`✅ Kept` from the start, `⚙ Tuned` if threshold/weight
+   changes on day one) and the rationale. Update the category header
+   count.
+2. **Removing an audit** — move the row to "Previously emitted but
+   dropped" and explain why, with a research citation or pragmatic
+   reasoning.
+3. **Tuning an audit** — change the row in place, change the status to
+   `⚙ Tuned`, and note the before/after and why.
+4. **CI enforcement** — the `audit-review-lint` task in TASKS.md tracks
+   the check that every audit slug emitted at runtime has a
+   corresponding table row here.
