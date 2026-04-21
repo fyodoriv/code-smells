@@ -4,6 +4,9 @@ node_modules/
 .DS_Store
 .idea/
 
+# Vitest v8 coverage output — regenerated on every test:coverage run.
+coverage/
+
 # Machine-generated report outputs (JSON + default MD) are large and
 # regenerated on every run — ignore those. But keep tracked the
 # human-written calibration / impact-correlation reports that document

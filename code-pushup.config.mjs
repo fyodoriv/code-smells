@@ -40,15 +40,23 @@
  * Official plugins skip gracefully when their inputs don't exist (e.g. no
  * tsconfig in target, no lockfile) — we detect missing inputs upfront.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 import coveragePlugin from "@code-pushup/coverage-plugin";
 import jsPackagesPlugin from "@code-pushup/js-packages-plugin";
 import jsdocsPlugin from "@code-pushup/jsdocs-plugin";
 import typescriptPlugin from "@code-pushup/typescript-plugin";
 
+import { resolveOutputDir } from "./lib/cli-core.mjs";
+import {
+  buildSecurityRefs,
+  detectPackageManager,
+  filterCategories,
+  resolveDefaultPatterns,
+  resolveLcovPath,
+  resolveTsconfigInputs,
+} from "./lib/config-helpers.mjs";
 import authorDispersionPlugin from "./plugins/author-dispersion.plugin.mjs";
 import bugFixDensityPlugin from "./plugins/bug-fix-density.plugin.mjs";
 import churnPlugin from "./plugins/churn.plugin.mjs";
@@ -63,111 +71,20 @@ import typeCoveragePlugin from "./plugins/type-coverage.plugin.mjs";
 const toolRoot = resolve(new URL(".", import.meta.url).pathname);
 const targetDir = resolve(process.env.CP_TARGET ?? process.cwd());
 
-/**
- * Resolve where reports should land. Precedence:
- *   1. CP_OUTPUT_DIR env var (explicit user override, absolute or relative
- *      to cwd) — honors local workflows like `CP_OUTPUT_DIR=./reports`.
- *   2. OS cache dir: `$XDG_CACHE_HOME/code-smells/<target-name>` on Linux,
- *      `~/Library/Caches/code-smells/<target-name>` on macOS,
- *      `tmpdir()/code-smells/<target-name>` on Windows. Default — this
- *      keeps reports out of the target repo so they never show up in
- *      `git status` and don't need gitignoring.
- */
-const resolveOutputDir = () => {
-  if (process.env.CP_OUTPUT_DIR) return resolve(process.env.CP_OUTPUT_DIR);
-  const safeName = basename(targetDir).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
-  const cacheHome =
-    process.env.XDG_CACHE_HOME ??
-    (process.platform === "darwin"
-      ? resolve(homedir(), "Library/Caches")
-      : process.platform === "win32"
-        ? tmpdir()
-        : resolve(homedir(), ".cache"));
-  return resolve(cacheHome, "code-smells", safeName);
-};
-const outputDir = resolveOutputDir();
+const outputDir = resolveOutputDir({
+  env: process.env,
+  platform: process.platform,
+  targetDir,
+});
 
-// Auto-detect source glob for monorepos. If the user didn't set
-// CP_PATTERNS and the target has no top-level src/ but has workspace
-// subdirs (plugins/<ws>/src, libs/<ws>/src, packages/<ws>/src), use a
-// brace-expanded glob that covers all of them. Otherwise fall back to
-// the single-package default. This matches the CP_ENTRY auto-detection
-// the coupling plugin does — so zero-config run from a monorepo root
-// "just works" for ESLint, jsdocs, and type-coverage too.
-const resolveDefaultPatterns = () => {
-  if (existsSync(resolve(targetDir, "src"))) return "src/**/*.{ts,tsx}";
-  const wsDirs = ["plugins", "libs", "packages"].filter((d) => existsSync(resolve(targetDir, d)));
-  if (wsDirs.length === 0) return "src/**/*.{ts,tsx}";
-  const braced = wsDirs.length === 1 ? wsDirs[0] : `{${wsDirs.join(",")}}`;
-  return `${braced}/*/src/**/*.{ts,tsx}`;
-};
-const patterns = process.env.CP_PATTERNS ?? resolveDefaultPatterns();
+const patterns = process.env.CP_PATTERNS ?? resolveDefaultPatterns(targetDir);
 
 // Conditional plugin registration — only add plugins whose required inputs exist.
 const hasTsconfig = existsSync(resolve(targetDir, "tsconfig.json"));
-// Detect the target's package manager explicitly. The js-packages plugin's
-// auto-derivation walks up from cwd, which breaks when the CLI is invoked
-// from elsewhere (e.g. `npx code-smells` in /tmp against a yarn target).
-const detectedPackageManager = existsSync(resolve(targetDir, "pnpm-lock.yaml"))
-  ? "pnpm"
-  : existsSync(resolve(targetDir, "yarn.lock"))
-    ? "yarn-classic"
-    : existsSync(resolve(targetDir, "package-lock.json"))
-      ? "npm"
-      : null;
+const detectedPackageManager = detectPackageManager(targetDir);
 const hasLockfile = detectedPackageManager !== null;
 
-// Coverage plugin: look at CP_COVERAGE_LCOV env or common default paths.
-const coverageLcovPath =
-  process.env.CP_COVERAGE_LCOV && resolve(targetDir, process.env.CP_COVERAGE_LCOV);
-const defaultLcovCandidates = [
-  "coverage/lcov.info",
-  "reports/coverage/lcov.info",
-  "coverage/unit/lcov.info",
-];
-const lcovPath =
-  coverageLcovPath && existsSync(coverageLcovPath)
-    ? coverageLcovPath
-    : defaultLcovCandidates.map((p) => resolve(targetDir, p)).find((p) => existsSync(p));
-
-/**
- * Resolve the tsconfig(s) the typescript plugin should analyze.
- *
- * Monorepo support: if the root tsconfig is a project-references file (has
- * `references: [...]` and no `include`/`files`), the typescript-plugin can't
- * use it directly — it would error "No files matched by the TypeScript
- * configuration." Expand the references into an explicit array of concrete
- * per-workspace tsconfigs, which the typescript-plugin handles natively via
- * its `tsconfig: string[]` option.
- *
- * If CP_TSCONFIG is set, it wins (comma-separated list supported). Otherwise
- * auto-detect reference-based roots.
- */
-const resolveTsconfigInputs = (rootTsconfigPath) => {
-  if (process.env.CP_TSCONFIG) {
-    return process.env.CP_TSCONFIG.split(",").map((p) => resolve(targetDir, p.trim())).filter(Boolean);
-  }
-  try {
-    // Strip comments from tsconfig before parsing — TS allows // and /* */.
-    const raw = readFileSync(rootTsconfigPath, "utf-8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/.*$/gm, "$1");
-    const cfg = JSON.parse(raw);
-    const hasReferences = Array.isArray(cfg.references) && cfg.references.length > 0;
-    const definesFiles =
-      (Array.isArray(cfg.files) && cfg.files.length > 0) ||
-      (Array.isArray(cfg.include) && cfg.include.length > 0);
-    if (hasReferences && !definesFiles) {
-      return cfg.references
-        .map((ref) => resolve(dirname(rootTsconfigPath), ref.path))
-        .map((p) => (p.endsWith(".json") ? p : resolve(p, "tsconfig.json")))
-        .filter((p) => existsSync(p));
-    }
-  } catch (err) {
-    // Malformed or missing tsconfig — fall through to single-path default.
-  }
-  return [rootTsconfigPath];
-};
+const lcovPath = resolveLcovPath(targetDir);
 
 const officialPlugins = [];
 if (hasTsconfig) {
@@ -319,12 +236,6 @@ const declaredCategories = [
   },
 ];
 
-const registeredSlugs = new Set(resolvedPlugins.map((p) => p.slug));
-// Build a set of (plugin-slug, audit-slug) pairs that the resolved plugins
-// actually expose. The filter below uses this to drop category refs that
-// point at audits which the current plugin lineup didn't produce — e.g.
-// npm-audit-prod disappears and yarn-classic-audit-prod appears when the
-// target uses Yarn instead of npm.
 const registeredAudits = new Set();
 for (const plugin of resolvedPlugins) {
   for (const audit of plugin.audits ?? []) {
@@ -332,30 +243,8 @@ for (const plugin of resolvedPlugins) {
   }
 }
 
-// Build the security category's refs dynamically so the package-manager
-// prefix on js-packages audit slugs matches what the plugin actually emits.
-const pmPrefix = detectedPackageManager === "yarn-classic"
-  ? "yarn-classic"
-  : detectedPackageManager === "yarn-modern"
-    ? "yarn-modern"
-    : detectedPackageManager === "pnpm"
-      ? "pnpm"
-      : "npm";
-const securityRefs = [
-  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-audit-prod`, weight: 3 },
-  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-audit-dev`, weight: 2 },
-  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-outdated-prod`, weight: 1 },
-  { type: "audit", plugin: "js-packages", slug: `${pmPrefix}-outdated-dev`, weight: 0 },
-];
-
-const filteredCategories = declaredCategories
-  .map((cat) => {
-    // Swap the security refs in dynamically if this is the security category.
-    const refs = cat.slug === "security" ? securityRefs : cat.refs;
-    // Drop refs whose plugin isn't registered, OR whose audit isn't exposed.
-    return { ...cat, refs: refs.filter((r) => registeredAudits.has(`${r.plugin}::${r.slug}`)) };
-  })
-  .filter((cat) => cat.refs.length > 0);
+const securityRefs = buildSecurityRefs(detectedPackageManager);
+const filteredCategories = filterCategories(declaredCategories, registeredAudits, securityRefs);
 
 export default {
   // Reports land in an OS cache dir by default (outside the target repo),

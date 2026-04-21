@@ -12,37 +12,37 @@
  * Env var knobs are honored verbatim (CP_TARGET, CP_PATTERNS, CP_ENTRY,
  * CP_TSCONFIG, CP_COVERAGE_LCOV, CP_ENABLE_FORMATJS, CP_OUTPUT_DIR,
  * CP_OPEN). See README.md.
+ *
+ * This file is intentionally a thin shim over lib/cli-core.mjs — all
+ * pure logic lives there and has unit tests. Changes to argv parsing,
+ * path resolution, or report rewriting should go in cli-core, not here.
  */
 
-// Node version gate — code-pushup and several of its deps use modern
-// syntax (e.g. string-width's /v regex flag, oxc-parser) that only parses
-// on Node 20+. Without this explicit check, users on Node 18 (common in
-// legacy repos pinned via .nvmrc) see a cryptic "Invalid regular
-// expression flags" SyntaxError from deep inside node_modules. Fail fast
-// with an actionable message before spawning anything.
-const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
-if (nodeMajor < 20) {
-  process.stderr.write(
-    `\ncode-smells: Node ${process.versions.node} is not supported — requires Node 20 or newer.\n` +
-      "\n" +
-      `  Switch Node version:   fnm use 22    (or)   nvm use 22\n` +
-      `  Then re-run:           npx code-smells\n` +
-      "\n" +
-      "This repo's .nvmrc may be pinning you to an older version — if so,\n" +
-      "you can still run code-smells by temporarily switching shells.\n\n",
-  );
+// Node version gate FIRST — runs before the ESM imports further down
+// are evaluated (import statements use node:* built-ins that work on
+// any version, but code-pushup's transitive deps use /v regex flags
+// that only parse on Node 20+). Fail fast with an actionable message.
+import { buildNodeVersionMessage, isUnsupportedNode } from "../lib/cli-core.mjs";
+if (isUnsupportedNode(process.versions.node)) {
+  process.stderr.write(buildNodeVersionMessage(process.versions.node));
   process.exit(1);
 }
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildChildArgs,
+  linkifyMarkdownContent,
+  pickOpener,
+  resolveOpenTarget,
+  resolveOutputDir,
+} from "../lib/cli-core.mjs";
 
 // Resolve the bundled config file relative to this script — works whether
-// the package is installed globally (~/.npm/...), into a target's
-// node_modules/, or run via npx (cached under ~/.npm/_npx/).
+// the package is installed globally, into a target's node_modules/, or
+// run via npx (cached under ~/.npm/_npx/).
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const toolRoot = resolve(__dirname, "..");
 const configPath = resolve(toolRoot, "code-pushup.config.mjs");
@@ -55,39 +55,20 @@ if (!existsSync(configPath)) {
 
 // Resolve the target directory for the working-directory switch below.
 // Several plugins (dependency-cruiser, simple-git, jscpd) walk up from cwd
-// to find git/tsconfig roots; if cwd is wrong they fail. Changing into the
-// target directory makes all tools Just Work with no per-plugin hacks.
+// to find git/tsconfig roots; if cwd is wrong they fail.
 const targetDir = resolve(process.env.CP_TARGET ?? process.cwd());
 if (!existsSync(targetDir)) {
   console.error(`code-smells: CP_TARGET directory does not exist: ${targetDir}`);
   process.exit(1);
 }
 
-// Mirror code-pushup.config.mjs's output-directory resolution so we can
-// print the report path after the run. Keep the logic in sync.
-const resolveOutputDir = () => {
-  if (process.env.CP_OUTPUT_DIR) return resolve(process.env.CP_OUTPUT_DIR);
-  const safeName = basename(targetDir).replace(/[^a-zA-Z0-9._-]/g, "_") || "default";
-  const cacheHome =
-    process.env.XDG_CACHE_HOME ??
-    (process.platform === "darwin"
-      ? resolve(homedir(), "Library/Caches")
-      : process.platform === "win32"
-        ? tmpdir()
-        : resolve(homedir(), ".cache"));
-  return resolve(cacheHome, "code-smells", safeName);
-};
-const outputDir = resolveOutputDir();
+const outputDir = resolveOutputDir({
+  env: process.env,
+  platform: process.platform,
+  targetDir,
+});
 
-// If the user didn't pass a subcommand, default to 'collect' — matches the
-// 99% use case and lets `npx code-smells` Just Work.
-const userArgs = process.argv.slice(2);
-const subcommands = new Set(["collect", "compare", "upload", "autorun", "history", "print-config", "merge-diffs"]);
-const firstIsSubcommand = userArgs.length > 0 && subcommands.has(userArgs[0]);
-const args = firstIsSubcommand ? userArgs : ["collect", ...userArgs];
-
-// Pass --config explicitly so code-pushup doesn't look for one in cwd.
-args.push("--config", configPath);
+const args = buildChildArgs(process.argv.slice(2), configPath);
 
 // Find code-pushup — it's a direct dependency, so node_modules/.bin/ next
 // to this script's package root should have it.
@@ -114,10 +95,10 @@ child.on("exit", (code, signal) => {
   if (code === 0 && existsSync(mdPath)) {
     // Rewrite the markdown report's relative file links to absolute file://
     // URLs so every viewer (TextEdit, Typora, Marked, VS Code preview,
-    // browser, GitHub rendering) can click through to the source line
-    // without resolving relative paths against the report directory.
+    // browser, GitHub rendering) can click through.
     try {
-      linkifyMarkdownReport(mdPath, outputDir);
+      const raw = readFileSync(mdPath, "utf-8");
+      writeFileSync(mdPath, linkifyMarkdownContent(raw, outputDir));
     } catch (err) {
       // Don't fail the run if post-processing breaks — the user still
       // has a usable report, just with non-clickable relative paths.
@@ -125,62 +106,18 @@ child.on("exit", (code, signal) => {
     }
 
     // Print a clickable report path — most terminals render file:// URLs as
-    // Cmd/Ctrl+click targets. Helps users find reports without digging.
+    // Cmd/Ctrl+click targets.
     process.stderr.write(`\nOpen report: file://${mdPath}\n`);
     process.stderr.write(`         or: file://${jsonPath}\n`);
   }
 
-  // Optional auto-open. CP_OPEN=md | json picks a format; if set,
-  // spawn the platform's default viewer (macOS `open`, Windows `start`,
-  // Linux `xdg-open`). Backgrounded so it doesn't delay our exit.
-  const openFormat = process.env.CP_OPEN;
-  if (code === 0 && openFormat) {
-    const formatMap = { md: mdPath, markdown: mdPath, json: jsonPath };
-    const target = formatMap[openFormat.toLowerCase()];
+  // Optional auto-open. CP_OPEN=md | json picks a format.
+  if (code === 0) {
+    const target = resolveOpenTarget(process.env.CP_OPEN, { mdPath, jsonPath });
     if (target && existsSync(target)) {
-      const opener =
-        process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-      spawnSync(opener, [target], { stdio: "ignore", detached: true });
+      spawnSync(pickOpener(process.platform), [target], { stdio: "ignore", detached: true });
     }
   }
 
   process.exit(code ?? (signal ? 1 : 0));
 });
-
-/**
- * Rewrite relative file links in the markdown report to absolute file://
- * URLs with #LNN line fragments pulled from the adjacent "Location"
- * column. Idempotent — safe to run multiple times.
- */
-function linkifyMarkdownReport(mdPath, reportDir) {
-  const raw = readFileSync(mdPath, "utf-8");
-  const lines = raw.split(/\r?\n/);
-
-  // Table rows in code-pushup issue tables look like:
-  //   | <sev> | <msg> | [`path/to/file`](<rel-path>) | <line-or-blank> |
-  // Message cells can contain escaped `\|` pipes (e.g. TypeScript union
-  // types), so we can't anchor on cell boundaries. Instead: (1) match the
-  // trailing cell from the end (may be blank for file-level issues like
-  // "imports N modules"), (2) find the last link target before it, and
-  // (3) rewrite only the link target to an absolute file:// URL, adding
-  // a #Lnumber anchor when a line number is present.
-  const trailingCell = /^(\|.*)\|(\s*)(\d*)(\s*)\|(\s*)$/;
-  const lastLinkTarget = /^(.*\]\()(?!file:|https?:)([^)]+)(\).*)$/;
-
-  const rewritten = lines.map((line) => {
-    const tail = line.match(trailingCell);
-    if (!tail) return line;
-    const [, body, spBeforeNum, lineNum, spAfterNum, spTrail] = tail;
-    const link = body.match(lastLinkTarget);
-    if (!link) return line;
-    const [, linkPrefix, relTarget, linkSuffix] = link;
-    // Always rewrite — even for files that no longer exist on disk (the git
-    // churn/bug-fix plugins cite historical paths). A well-formed absolute
-    // file:// URL is clickable; a relative link isn't.
-    const absPath = isAbsolute(relTarget) ? relTarget : resolve(reportDir, relTarget);
-    const anchor = lineNum ? `#L${lineNum}` : "";
-    return `${linkPrefix}file://${absPath}${anchor}${linkSuffix}|${spBeforeNum}${lineNum}${spAfterNum}|${spTrail}`;
-  });
-
-  writeFileSync(mdPath, rewritten.join("\n"));
-}

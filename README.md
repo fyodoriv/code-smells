@@ -183,8 +183,14 @@ Every custom file's JSDoc header explains **why** that specific wrapper exists �
 git clone https://github.com/fyodoriv/code-smells && cd code-smells
 npm install
 node ./bin/code-smells.mjs  # run against cwd (the tool's own repo)
+npm test                    # vitest (200+ unit tests)
+npm run test:coverage       # v8 coverage, thresholds: 95% stmts/funcs/lines, 90% branches
 npm run format              # prettier
 ```
+
+CI runs tests + coverage on every push / PR via `.github/workflows/ci.yml`.
+Coverage thresholds live in `vitest.config.mjs` — the build fails if any
+metric drops below target.
 
 Releases are automated via [release-please](https://github.com/googleapis/release-please-action) — conventional commits on `main` accumulate into a release PR; when it merges, a GitHub release fires and `.github/workflows/publish.yml` publishes to npm with [provenance](https://docs.npmjs.com/generating-provenance-statements). To bootstrap: add an `NPM_TOKEN` repo secret with an npm automation/granular token scoped to the `code-smells` package.
 
