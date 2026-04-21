@@ -30,6 +30,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "plugins",
     "eslint-rules",
     "code-pushup.config.mjs",

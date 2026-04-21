@@ -312,6 +312,16 @@ describe("teamOwnershipPlugin", () => {
     expect(results[0].displayValue).toContain("no CODEOWNERS");
   });
 
+  it("handles codeowners-utils returning null (not an empty array)", async () => {
+    // `loadOwners` returns null when the target has no CODEOWNERS file. If we
+    // didn't normalize to [], `rules.length` would throw.
+    mockLoadOwners.mockResolvedValueOnce(null);
+    const plugin = await teamOwnershipPlugin({ targetDir: process.cwd() });
+    const results = await plugin.runner();
+    expect(results).toHaveLength(2);
+    expect(results[0].value).toBe(0);
+  });
+
   it("catches errors from loadOwners", async () => {
     mockLoadOwners.mockRejectedValueOnce(new Error("cannot read CODEOWNERS"));
     const plugin = await teamOwnershipPlugin({ targetDir: process.cwd() });

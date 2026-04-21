@@ -63,9 +63,11 @@ export default async function teamOwnershipPlugin(options) {
 
   // Load CODEOWNERS once up-front. If missing, the plugin still registers but
   // reports zero issues (score 1) so it doesn't break the category.
+  // `loadOwners` returns null (not []) when no CODEOWNERS file is found —
+  // normalize here so the rest of the plugin can treat it uniformly.
   let rules = [];
   try {
-    rules = await loadOwners(targetDir);
+    rules = (await loadOwners(targetDir)) ?? [];
   } catch {
     rules = [];
   }

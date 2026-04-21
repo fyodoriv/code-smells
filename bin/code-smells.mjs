@@ -30,6 +30,7 @@ if (isUnsupportedNode(process.versions.node)) {
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -68,14 +69,25 @@ const outputDir = resolveOutputDir({
   targetDir,
 });
 
-const args = buildChildArgs(process.argv.slice(2), configPath);
+// Resolve @code-pushup/cli's bin.js via Node's module resolution — works
+// regardless of hoisting depth. We can't rely on `node_modules/.bin/code-pushup`
+// because npm may flatten code-pushup into the *target's* node_modules when
+// code-smells is installed as a dependency. Spawning `process.execPath binJs`
+// is the same pattern we already use for knip and jscpd.
+const require = createRequire(import.meta.url);
+let cpBinJs;
+try {
+  cpBinJs = require.resolve("@code-pushup/cli/bin.js");
+} catch {
+  console.error("code-smells: @code-pushup/cli not found. Try reinstalling code-smells.");
+  process.exit(1);
+}
 
-// Find code-pushup — it's a direct dependency, so node_modules/.bin/ next
-// to this script's package root should have it.
-const cliPath = resolve(toolRoot, "node_modules", ".bin", "code-pushup");
-const command = existsSync(cliPath) ? cliPath : "code-pushup";
+// Collect trailing args (config path etc.) after the cpBinJs entry — spawn
+// needs [node, binJs, ...args].
+const cpArgs = buildChildArgs(process.argv.slice(2), configPath);
 
-const child = spawn(command, args, {
+const child = spawn(process.execPath, [cpBinJs, ...cpArgs], {
   stdio: "inherit",
   cwd: targetDir,
   // CP_TARGET resolves to an absolute path; set it explicitly so the config
@@ -84,7 +96,7 @@ const child = spawn(command, args, {
 });
 
 child.on("error", (err) => {
-  console.error(`code-smells: failed to spawn ${command}:`, err.message);
+  console.error(`code-smells: failed to spawn code-pushup:`, err.message);
   process.exit(1);
 });
 
