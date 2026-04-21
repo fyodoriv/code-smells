@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.10](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.9...code-smells-v0.2.10) (2026-04-21)
+
+
+### Bug Fixes
+
+* ship lib/ in the tarball, resolve code-pushup bin robustly ([81d1d30](https://github.com/fyodoriv/code-smells/commit/81d1d30bc2dd87bf23ec5f4cd92887b01184bb72))
+
 ## [0.2.9](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.8...code-smells-v0.2.9) (2026-04-21)
 
 
