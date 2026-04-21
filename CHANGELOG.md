@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.8](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.7...code-smells-v0.2.8) (2026-04-21)
+
+
+### Bug Fixes
+
+* rewrite markdown report links to clickable absolute file:// URLs ([5ba8a9d](https://github.com/fyodoriv/code-smells/commit/5ba8a9d8b914ebb9feeff82b6e5393b92912f455))
+
 ## [0.2.7](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.6...code-smells-v0.2.7) (2026-04-20)
 
 

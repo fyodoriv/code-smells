@@ -1,6 +1,6 @@
 {
   "name": "code-smells",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "type": "module",
   "description": "Code smell detector for React/TypeScript repos. Thin wrapper over code-pushup with curated ESLint rules, research-backed signals (Tornhill temporal coupling, Nagappan team ownership), and monorepo support.",
   "keywords": [
