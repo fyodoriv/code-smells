@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.9](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.8...code-smells-v0.2.9) (2026-04-21)
+
+
+### Bug Fixes
+
+* reject Node 18 up front with an actionable error message ([81910f2](https://github.com/fyodoriv/code-smells/commit/81910f26cdae5f89d3d2f7cb8aa20699272c9874))
+
+
+### Documentation
+
+* add P0 task to document every audit with reasoning ([add93ba](https://github.com/fyodoriv/code-smells/commit/add93baa53df90afef914f92b6be82698c3d9939))
+
 ## [0.2.8](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.7...code-smells-v0.2.8) (2026-04-21)
 
 
