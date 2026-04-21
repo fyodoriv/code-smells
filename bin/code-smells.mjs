@@ -13,6 +13,27 @@
  * CP_TSCONFIG, CP_COVERAGE_LCOV, CP_ENABLE_FORMATJS, CP_OUTPUT_DIR,
  * CP_OPEN). See README.md.
  */
+
+// Node version gate — code-pushup and several of its deps use modern
+// syntax (e.g. string-width's /v regex flag, oxc-parser) that only parses
+// on Node 20+. Without this explicit check, users on Node 18 (common in
+// legacy repos pinned via .nvmrc) see a cryptic "Invalid regular
+// expression flags" SyntaxError from deep inside node_modules. Fail fast
+// with an actionable message before spawning anything.
+const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
+if (nodeMajor < 20) {
+  process.stderr.write(
+    `\ncode-smells: Node ${process.versions.node} is not supported — requires Node 20 or newer.\n` +
+      "\n" +
+      `  Switch Node version:   fnm use 22    (or)   nvm use 22\n` +
+      `  Then re-run:           npx code-smells\n` +
+      "\n" +
+      "This repo's .nvmrc may be pinning you to an older version — if so,\n" +
+      "you can still run code-smells by temporarily switching shells.\n\n",
+  );
+  process.exit(1);
+}
+
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";

@@ -38,7 +38,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "check": "CP_TARGET=${CP_TARGET:-$PWD} node ./bin/code-smells.mjs --persist.outputDir=reports --persist.format=json --persist.format=md",
