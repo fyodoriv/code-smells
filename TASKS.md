@@ -1,5 +1,64 @@
 # Tasks
 
+## P0
+
+- [ ] Document every warning/check with its reasoning
+  - **ID**: document-audit-reasoning
+  - **Tags**: documentation, ux, trust
+  - **Details**: Every audit emitted by code-smells needs a human-readable
+    explanation of WHY it's flagged, what the research/rationale is, and
+    what an engineer should do about it. Today most audits have a one-line
+    description that barely says what rule fired. Users seeing a 500-row
+    report can't triage because they don't know which findings actually
+    matter.
+    Deliverables:
+    1. Enumerate every audit across all plugins:
+       - ESLint rules in `eslint.target-rules.mjs` (~40+ rules including
+         our custom hook-count, use-effect-count, unstable-selector-returns,
+         domain-boundaries)
+       - TypeScript strict checks (via @code-pushup/typescript-plugin)
+       - Knip (dead code, unused exports, unused deps)
+       - JSCPD (duplication)
+       - Temporal coupling (Tornhill X-Rays)
+       - Team ownership (Nagappan 2007)
+       - Churn / bug-fix density (own plugins)
+       - Author dispersion
+       - Coupling (dependency-cruiser)
+       - js-packages (audit + outdated)
+       - type-coverage
+    2. For each audit, document:
+       - **What it flags** — one sentence describing the condition
+       - **Why it matters** — research citation or pragmatic reasoning
+         (e.g., "Tornhill 2015: files touched together are likely
+         coupled; high temporal coupling predicts defect density")
+       - **When to fix vs ignore** — false positive patterns, legitimate
+         exceptions
+       - **How to fix** — concrete remediation (refactor pattern, rule
+         disable comment if intentional, etc.)
+    3. Surface the docs in two places:
+       - **In the report itself** — each audit's `description` field in
+         code-pushup should link to `docs/audits/<audit-slug>.md` so
+         clicking the audit in report.md jumps to the explainer
+       - **README catalog** — a table listing all audits grouped by
+         category with the one-sentence "what it flags"
+    4. Establish a pattern so new audits must ship with a doc entry
+       (add a check to CI that every audit slug has a
+       `docs/audits/<slug>.md` file).
+  - **Files**: `docs/audits/*.md` (new, one per audit), `README.md`
+    (audit catalog table), `code-pushup.config.mjs` (wire description
+    links), each `plugins/*.plugin.mjs` (ensure description fields
+    reference the docs), possibly `scripts/check-audit-docs.mjs` (new)
+  - **Acceptance**:
+    - Every audit emitted has a corresponding `docs/audits/<slug>.md`
+      explainer with What/Why/When to ignore/How to fix
+    - `README.md` has an audit catalog with every audit grouped by
+      category
+    - Running `code-smells` on a target repo, clicking any audit in
+      report.md jumps to its explainer
+    - CI check fails if a new audit is added without a doc
+    - Every "why" cites either a research paper, a named pattern, or
+      explicit pragmatic reasoning — no bare "this is bad" assertions
+
 ## P1
 
 (none — the P1 research/calibration work has shipped. See git log for
