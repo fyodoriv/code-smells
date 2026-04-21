@@ -35,11 +35,23 @@ const workspacesWithSrc = (targetDir, dir) => {
     .filter((rel) => existsSync(join(targetDir, rel)) && statSync(join(targetDir, rel)).isDirectory());
 };
 
-/** Resolve the `entry` option into an array of entry paths. */
+/**
+ * Resolve the `entry` option into an array of entry paths that
+ * actually exist on disk. Any non-existent path is filtered out — a
+ * previous bug where the default `"src"` fallback returned `["src"]`
+ * even when no `src/` directory existed caused dependency-cruiser to
+ * crash with ENOENT. Downstream callers must handle the empty-array
+ * case as a graceful skip.
+ */
 const resolveEntries = (targetDir, entry) => {
-  if (Array.isArray(entry)) return entry;
+  const existsIn = (e) => existsSync(join(targetDir, e));
+  if (Array.isArray(entry)) return entry.filter(existsIn);
   if (typeof entry === "string" && entry.includes(",")) {
-    return entry.split(",").map((s) => s.trim()).filter(Boolean);
+    return entry
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter(existsIn);
   }
   if (entry === "src" && !existsSync(join(targetDir, "src"))) {
     const monorepoEntries = [
@@ -49,7 +61,7 @@ const resolveEntries = (targetDir, entry) => {
     ];
     if (monorepoEntries.length > 0) return monorepoEntries;
   }
-  return [entry];
+  return existsIn(entry) ? [entry] : [];
 };
 
 /**
@@ -75,6 +87,25 @@ export default function couplingPlugin(options) {
       },
     ],
     runner: async () => {
+      // Graceful skip: when the target has no recognizable source entry —
+      // no `src/` directory, no `plugins/<ws>/src/` workspaces, and no
+      // user-supplied entry that exists on disk — there's nothing to
+      // analyze. Emit a zero-violation audit rather than crashing
+      // dependency-cruiser with ENOENT. Users can point at real sources
+      // via `CP_ENTRY=plugins,lib` or similar.
+      if (entries.length === 0) {
+        return [
+          {
+            slug: "high-fan-out",
+            title: `Files importing more than ${fanOutThreshold} modules`,
+            score: 1,
+            value: 0,
+            displayValue: "skipped — no source entries found (set CP_ENTRY to override)",
+            details: { issues: [] },
+          },
+        ];
+      }
+
       // cruise() resolves tsconfig relative to process.cwd(). Target repos have
       // their own tsconfig; temporarily chdir so dependency-cruiser picks it up.
       const originalCwd = process.cwd();

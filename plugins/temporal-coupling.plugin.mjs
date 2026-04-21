@@ -71,7 +71,12 @@ const buildImportEdges = async (targetDir, entries) => {
   }
 };
 
-/** Auto-detect workspace src directories for monorepos, same pattern as coupling plugin. */
+/**
+ * Auto-detect workspace src directories for monorepos, same pattern as
+ * coupling plugin. Returns an empty array when no recognizable entry
+ * exists — the caller must treat that as a graceful skip rather than
+ * handing `["src"]` to dependency-cruiser (which crashes with ENOENT).
+ */
 const resolveEntries = (targetDir) => {
   if (existsSync(join(targetDir, "src"))) return ["src"];
   const workspaces = [];
@@ -85,7 +90,7 @@ const resolveEntries = (targetDir) => {
       }
     }
   }
-  return workspaces.length > 0 ? workspaces : ["src"];
+  return workspaces;
 };
 
 /**
@@ -151,14 +156,20 @@ export default function temporalCouplingPlugin(options) {
         }
       }
 
-      // Build import-edge set. If cruise fails (missing files, misconfigured
-      // tsconfig), treat import edges as empty — we'll overreport rather than
-      // silently drop the audit.
+      // Build import-edge set. If `resolveEntries` finds nothing (flat
+      // repo, no src/ or workspace subdirs), skip cruise — it would crash
+      // on ENOENT. If cruise fails for any other reason (misconfigured
+      // tsconfig, unresolved module), fall through to an empty edge set
+      // so we over-report hidden coupling rather than silently dropping
+      // the audit.
       let importEdges = new Set();
-      try {
-        importEdges = await buildImportEdges(targetDir, resolveEntries(targetDir));
-      } catch {
-        importEdges = new Set();
+      const entries = resolveEntries(targetDir);
+      if (entries.length > 0) {
+        try {
+          importEdges = await buildImportEdges(targetDir, entries);
+        } catch {
+          importEdges = new Set();
+        }
       }
 
       const violations = [];
