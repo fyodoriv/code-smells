@@ -14,9 +14,9 @@
  * CP_OPEN). See README.md.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Resolve the bundled config file relative to this script — works whether
@@ -87,16 +87,29 @@ child.on("error", (err) => {
 });
 
 child.on("exit", (code, signal) => {
-  // Print a clickable report path — most terminals render file:// URLs as
-  // Cmd/Ctrl+click targets. Helps users find reports without digging.
   const mdPath = resolve(outputDir, "report.md");
   const jsonPath = resolve(outputDir, "report.json");
+
   if (code === 0 && existsSync(mdPath)) {
+    // Rewrite the markdown report's relative file links to absolute file://
+    // URLs so every viewer (TextEdit, Typora, Marked, VS Code preview,
+    // browser, GitHub rendering) can click through to the source line
+    // without resolving relative paths against the report directory.
+    try {
+      linkifyMarkdownReport(mdPath, outputDir);
+    } catch (err) {
+      // Don't fail the run if post-processing breaks — the user still
+      // has a usable report, just with non-clickable relative paths.
+      process.stderr.write(`\n[code-smells] link rewrite skipped: ${err?.message ?? err}\n`);
+    }
+
+    // Print a clickable report path — most terminals render file:// URLs as
+    // Cmd/Ctrl+click targets. Helps users find reports without digging.
     process.stderr.write(`\nOpen report: file://${mdPath}\n`);
     process.stderr.write(`         or: file://${jsonPath}\n`);
   }
 
-  // Optional auto-open. CP_OPEN=md | html | json picks a format; if set,
+  // Optional auto-open. CP_OPEN=md | json picks a format; if set,
   // spawn the platform's default viewer (macOS `open`, Windows `start`,
   // Linux `xdg-open`). Backgrounded so it doesn't delay our exit.
   const openFormat = process.env.CP_OPEN;
@@ -112,3 +125,41 @@ child.on("exit", (code, signal) => {
 
   process.exit(code ?? (signal ? 1 : 0));
 });
+
+/**
+ * Rewrite relative file links in the markdown report to absolute file://
+ * URLs with #LNN line fragments pulled from the adjacent "Location"
+ * column. Idempotent — safe to run multiple times.
+ */
+function linkifyMarkdownReport(mdPath, reportDir) {
+  const raw = readFileSync(mdPath, "utf-8");
+  const lines = raw.split(/\r?\n/);
+
+  // Table rows in code-pushup issue tables look like:
+  //   | <sev> | <msg> | [`path/to/file`](<rel-path>) | <line-or-blank> |
+  // Message cells can contain escaped `\|` pipes (e.g. TypeScript union
+  // types), so we can't anchor on cell boundaries. Instead: (1) match the
+  // trailing cell from the end (may be blank for file-level issues like
+  // "imports N modules"), (2) find the last link target before it, and
+  // (3) rewrite only the link target to an absolute file:// URL, adding
+  // a #Lnumber anchor when a line number is present.
+  const trailingCell = /^(\|.*)\|(\s*)(\d*)(\s*)\|(\s*)$/;
+  const lastLinkTarget = /^(.*\]\()(?!file:|https?:)([^)]+)(\).*)$/;
+
+  const rewritten = lines.map((line) => {
+    const tail = line.match(trailingCell);
+    if (!tail) return line;
+    const [, body, spBeforeNum, lineNum, spAfterNum, spTrail] = tail;
+    const link = body.match(lastLinkTarget);
+    if (!link) return line;
+    const [, linkPrefix, relTarget, linkSuffix] = link;
+    // Always rewrite — even for files that no longer exist on disk (the git
+    // churn/bug-fix plugins cite historical paths). A well-formed absolute
+    // file:// URL is clickable; a relative link isn't.
+    const absPath = isAbsolute(relTarget) ? relTarget : resolve(reportDir, relTarget);
+    const anchor = lineNum ? `#L${lineNum}` : "";
+    return `${linkPrefix}file://${absPath}${anchor}${linkSuffix}|${spBeforeNum}${lineNum}${spAfterNum}|${spTrail}`;
+  });
+
+  writeFileSync(mdPath, rewritten.join("\n"));
+}
