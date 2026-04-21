@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.11](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.10...code-smells-v0.2.11) (2026-04-21)
+
+
+### Bug Fixes
+
+* gracefully skip coupling when target has no source entries ([#12](https://github.com/fyodoriv/code-smells/issues/12)) ([4e6ff98](https://github.com/fyodoriv/code-smells/commit/4e6ff989936a1d67eb00db84e0120daf4432bf90))
+
+
+### Refactoring
+
+* drop redundant audits, add accessibility + test-quality cats ([#11](https://github.com/fyodoriv/code-smells/issues/11)) ([1f0ac13](https://github.com/fyodoriv/code-smells/commit/1f0ac130945371d504cd248f3e3f6588185ba923))
+
 ## [0.2.10](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.9...code-smells-v0.2.10) (2026-04-21)
 
 
