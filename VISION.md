@@ -133,14 +133,14 @@ build and integrate.
 code-pushup ships 6 official plugins we haven't used. Each fills a gap other
 industry tools charge money for:
 
-| Plugin | Covers | Custom code required |
-|---|---|---|
-| `@code-pushup/coverage-plugin` | Test coverage (lcov) | 0 lines |
-| `@code-pushup/js-packages-plugin` | `npm audit` + outdated deps | 0 lines |
-| `@code-pushup/typescript-plugin` | TypeScript compiler diagnostics (strict flags, no-implicit-any, semantic errors) | 0 lines |
-| `@code-pushup/jsdocs-plugin` | Documentation coverage | 0 lines |
-| `@code-pushup/axe-plugin` | Accessibility via axe-core | 0 lines |
-| `@code-pushup/eslint-plugin` | Any ESLint rule as an audit (big lever — see "Replacement plan" above) | 0 lines |
+| Plugin | Covers | Custom code required | Status |
+|---|---|---|---|
+| `@code-pushup/coverage-plugin` | Test coverage (lcov) | 0 lines | ✓ adopted |
+| `@code-pushup/js-packages-plugin` | `npm audit` + outdated deps | 0 lines | ✓ adopted |
+| `@code-pushup/typescript-plugin` | TypeScript compiler diagnostics (strict flags, no-implicit-any, semantic errors) | 0 lines | ✓ adopted |
+| `@code-pushup/jsdocs-plugin` | Documentation coverage | 0 lines | ✗ dropped Apr 2026 — Steidl 2013 ICSM: no correlation with defect density |
+| `@code-pushup/axe-plugin` | Accessibility via axe-core | 0 lines | ✗ skipped per ADR-0001 — jsx-a11y chosen instead |
+| `@code-pushup/eslint-plugin` | Any ESLint rule as an audit (big lever — see "Replacement plan" above) | 0 lines | ✓ adopted (our wrapper, same surface) |
 
 **Rule:** before writing any new plugin, check if code-pushup already ships
 one. A 1-line config entry is always better than a custom plugin.
@@ -241,10 +241,10 @@ Tracking as of the ESLint replacement work:
 | Metric | Target | Current |
 |---|---|---|
 | Plugins with zero custom AST traversals | 7 / 7 | **9 / 9** ✓ |
-| Dependencies on maintained tools | ≥ 10 | **14** ✓ (eslint, eslint-plugin-react, eslint-plugin-react-perf, eslint-plugin-sonarjs, @typescript-eslint/parser, dependency-cruiser, jscpd, ts-morph, @code-pushup/cli, @code-pushup/typescript-plugin, @code-pushup/js-packages-plugin, @code-pushup/jsdocs-plugin, + 2 utilities) |
-| Plugin count | 7 | **9** (added typescript, js-packages, jsdocs) |
-| Audit count | 15 | **25** (+ cognitive complexity, cyclomatic complexity, TS diagnostics, npm-audit, documentation coverage) |
-| Category count | 4 | **6** (+ Type Safety, Security & Dependencies) |
+| Dependencies on maintained tools | ≥ 10 | **13** ✓ (eslint, eslint-plugin-react, eslint-plugin-react-perf, eslint-plugin-sonarjs, eslint-plugin-jsx-a11y, eslint-plugin-testing-library, @typescript-eslint/parser, dependency-cruiser, jscpd, @code-pushup/cli, @code-pushup/typescript-plugin, @code-pushup/js-packages-plugin, @code-pushup/coverage-plugin, + utilities) |
+| Plugin count | 7 | **9** (typescript, js-packages, coverage; JSDocs dropped Apr 2026 — Steidl 2013 discredited comment density as a defect signal) |
+| Audit count | 15 | **34 scored** (Component Health 5, Render Performance 4, Coupling 3, Type Safety 5, Security 3, Accessibility 11, Test Quality 11, Maintainability 11 — pm-aware) |
+| Category count | 4 | **8** (+ Type Safety, Security & Dependencies, Accessibility, Test Quality) |
 | Custom analysis LOC | < 300 | **~710** — git plugins (338, unchanged, no viable alternative), custom ESLint rules + utils (248), custom ESLint wrapper plugin (122) |
 | `npx code-pushup collect` runtime | < 30s on 500-file repo | not yet measured |
 

@@ -6,8 +6,10 @@
  * What's here:
  *   Source files (.ts/.tsx, excluding tests/stories):
  *     - react-perf    — inline function / object / array props in JSX
- *     - react         — jsx-no-bind, no-multi-comp (god-file signal)
- *     - sonarjs       — cognitive-complexity, cyclomatic-complexity
+ *     - react         — no-multi-comp (god-file signal)
+ *     - sonarjs       — cognitive-complexity (cyclomatic was dropped as
+ *                       redundant per Campbell 2018: cognitive strictly
+ *                       dominates, and McCabe 1976 is ~80% LOC-explained)
  *     - ESLint core   — max-lines-per-function
  *     - jsx-a11y      — accessibility (alt-text, aria, interactive focus)
  *     - formatjs      — hardcoded user-facing strings (opt-in via env)
@@ -65,17 +67,19 @@ export default [
     },
     settings: { react: { version: "detect" } },
     rules: {
-      // Component shape
+      // Component shape. cyclomatic-complexity intentionally dropped —
+      // redundant with cognitive-complexity (Campbell 2018). `ignoreStateless:
+      // true` so small co-located functional helpers don't trip the rule;
+      // we only want to flag files that actually export multiple components.
       "max-lines-per-function": ["warn", { max: 150, skipBlankLines: true, skipComments: true }],
-      "react/no-multi-comp": ["warn", { ignoreStateless: false }],
+      "react/no-multi-comp": ["warn", { ignoreStateless: true }],
       "sonarjs/cognitive-complexity": ["warn", 15],
-      "sonarjs/cyclomatic-complexity": ["warn", { threshold: 10 }],
 
-      // Render signals
+      // Render signals. `react/jsx-no-bind` dropped — redundant with
+      // `react-perf/jsx-no-new-function-as-prop`.
       "react-perf/jsx-no-new-function-as-prop": "warn",
       "react-perf/jsx-no-new-object-as-prop": "warn",
       "react-perf/jsx-no-new-array-as-prop": "warn",
-      "react/jsx-no-bind": ["warn", { allowArrowFunctions: false, allowFunctions: false }],
 
       // Accessibility (jsx-a11y). Curated subset — recommended but not the full
       // set since some rules are noisy on non-standard patterns.

@@ -99,14 +99,13 @@ describe("pmSlugPrefix", () => {
 });
 
 describe("buildSecurityRefs", () => {
-  it("builds 4 refs for npm", () => {
+  it("builds 3 refs for npm (outdated-dev dropped)", () => {
     const refs = buildSecurityRefs("npm");
-    expect(refs).toHaveLength(4);
+    expect(refs).toHaveLength(3);
     expect(refs.map((r) => r.slug)).toEqual([
       "npm-audit-prod",
       "npm-audit-dev",
       "npm-outdated-prod",
-      "npm-outdated-dev",
     ]);
   });
 
@@ -120,8 +119,8 @@ describe("buildSecurityRefs", () => {
     expect(refs[0].slug).toBe("yarn-classic-audit-prod");
   });
 
-  it("weights match the canonical order", () => {
-    expect(buildSecurityRefs("npm").map((r) => r.weight)).toEqual([3, 2, 1, 0]);
+  it("weights: prod-audit=3, dev-audit=1, outdated-prod=1", () => {
+    expect(buildSecurityRefs("npm").map((r) => r.weight)).toEqual([3, 1, 1]);
   });
 });
 
