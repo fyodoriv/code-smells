@@ -111,9 +111,20 @@ export default function authorDispersionPlugin(options) {
           const total = counts.reduce((a, b) => a + b, 0);
           const topShare = Math.max(0, ...counts) / Math.max(1, total);
           const topAuthor = [...authors.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-          return { file, topShare, topAuthor, totalCommits: total };
+          // authorCount gates out files with only one author in their
+          // history. On solo/personal repos every file has 100% one-
+          // author dominance by definition — reporting that as a bus-
+          // factor risk is unactionable noise. Only files where >= 2
+          // distinct authors have contributed can meaningfully have
+          // "low" vs "high" bus factor.
+          return { file, topShare, topAuthor, totalCommits: total, authorCount: authors.size };
         })
-        .filter((x) => x.totalCommits >= minCommitsForBusFactor && x.topShare >= busFactorRatio)
+        .filter(
+          (x) =>
+            x.totalCommits >= minCommitsForBusFactor &&
+            x.authorCount > 1 &&
+            x.topShare >= busFactorRatio,
+        )
         .sort((a, b) => b.topShare - a.topShare);
 
       const maxAuthors = Math.max(0, ...[...perFile.values()].map((a) => a.size));

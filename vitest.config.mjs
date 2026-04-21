@@ -21,7 +21,9 @@ export default defineConfig({
     include: ["test/**/*.spec.mjs", "lib/**/*.spec.mjs"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "text-summary", "html", "json-summary"],
+      // lcov is read by the `coverage` code-pushup plugin for the Test
+      // Quality category; the others are for humans.
+      reporter: ["text", "text-summary", "html", "json-summary", "lcov"],
       include: ["lib/**/*.mjs", "plugins/**/*.mjs", "eslint-rules/**/*.mjs"],
       exclude: [
         "**/*.spec.mjs",

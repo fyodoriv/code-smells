@@ -27,25 +27,32 @@
  *
  * Plugins:
  *   - eslint       — our thin wrapper over ESLint's Node API. Drives all
- *                    component-shape and render-signal audits from flat-
- *                    config rules (react-perf, sonarjs, max-lines-per-function,
- *                    custom gap-fillers).
+ *                    component-shape, render-signal, accessibility, and
+ *                    testing-library audits from flat-config rules
+ *                    (react-perf, sonarjs, max-lines-per-function, jsx-a11y,
+ *                    testing-library, custom gap-fillers).
  *   - typescript   — @code-pushup/typescript-plugin. TS compiler diagnostics.
  *   - js-packages  — @code-pushup/js-packages-plugin. npm audit + outdated.
- *   - jsdocs       — @code-pushup/jsdocs-plugin. Documentation coverage.
+ *   - coverage     — @code-pushup/coverage-plugin. Test coverage from lcov.
  *   - coupling     — dependency-cruiser programmatic API (fan-out)
  *   - duplication  — jscpd CLI (duplicated lines)
+ *   - knip         — dead code (unused files/exports/imports/deps)
+ *   - type-coverage — inferred-any measurement
  *   - churn, bug-fix-density, author-dispersion — git log
+ *   - temporal-coupling, team-ownership — hidden coupling + cross-team churn
  *
  * Official plugins skip gracefully when their inputs don't exist (e.g. no
  * tsconfig in target, no lockfile) — we detect missing inputs upfront.
+ *
+ * JSDocs plugin was dropped in April 2026 — Steidl 2013 ICSM showed no
+ * correlation between comment density and defect rate or maintainability.
+ * Its 8 audits inflated the report without paying back in signal.
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import coveragePlugin from "@code-pushup/coverage-plugin";
 import jsPackagesPlugin from "@code-pushup/js-packages-plugin";
-import jsdocsPlugin from "@code-pushup/jsdocs-plugin";
 import typescriptPlugin from "@code-pushup/typescript-plugin";
 
 import { resolveOutputDir } from "./lib/cli-core.mjs";
@@ -122,7 +129,6 @@ if (hasLockfile) {
   };
   officialPlugins.push(plugin);
 }
-officialPlugins.push(jsdocsPlugin({ patterns: [resolve(targetDir, patterns)] }));
 if (lcovPath) {
   officialPlugins.push(coveragePlugin({ reports: [lcovPath] }));
 }
@@ -159,12 +165,11 @@ const declaredCategories = [
     slug: "component-health",
     title: "Component Health",
     description:
-      "React component shape: body size, multi-component files, cognitive and cyclomatic complexity, hook overload.",
+      "React component shape: body size, multi-component files, cognitive complexity, hook overload. Cyclomatic complexity was dropped as redundant with cognitive (Campbell 2018 shows cognitive strictly dominates; McCabe 1976 is ~80% explained by LOC).",
     refs: [
       { type: "audit", plugin: "eslint", slug: "max-lines-per-function-c6b359edbd4c4da7", weight: 2 },
-      { type: "audit", plugin: "eslint", slug: "react-no-multi-comp-1125dd5c4c2da7c8", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "react-no-multi-comp-26bfe1cba1fabb7e", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "sonarjs-cognitive-complexity-b091472019f97d9b", weight: 3 },
-      { type: "audit", plugin: "eslint", slug: "sonarjs-cyclomatic-complexity-7c799240e8c0bc4a", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "code-smells-hook-count-7c799240e8c0bc4a", weight: 2 },
       { type: "audit", plugin: "eslint", slug: "code-smells-use-effect-count-a16d575fb0debb40", weight: 3 },
     ],
@@ -173,19 +178,19 @@ const declaredCategories = [
     slug: "render-performance",
     title: "Render Performance",
     description:
-      "Static proxy for re-render cost: inline props and unstable selectors. Community ESLint rules (react-perf, jsx-no-bind) + one custom rule for useSelector stability.",
+      "Static proxy for re-render cost: inline props and unstable selectors. The react-perf rules are honest proxies (inline fn/obj/arr props defeat React.memo); the unstable-selector rule catches a real bug (inline object returns from useSelector bypass ===-check and re-render every dispatch). jsx-no-bind was dropped as redundant with jsx-no-new-function-as-prop.",
     refs: [
       { type: "audit", plugin: "eslint", slug: "react-perf-jsx-no-new-function-as-prop", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "react-perf-jsx-no-new-object-as-prop", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "react-perf-jsx-no-new-array-as-prop", weight: 1 },
-      { type: "audit", plugin: "eslint", slug: "react-jsx-no-bind-5e6d9af7de4ef766", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "code-smells-unstable-selector-returns", weight: 3 },
     ],
   },
   {
     slug: "coupling",
     title: "Coupling",
-    description: "Files with too many imports (syntactic fan-out), files referencing too many domain categories (semantic fan-out across modules/features — opt-in via domain-boundaries), and file pairs that co-change without a declared import edge (Tornhill hidden coupling).",
+    description:
+      "Files with too many imports (syntactic fan-out), files referencing too many domain categories (semantic fan-out across modules/features — opt-in via domain-boundaries), and file pairs that co-change without a declared import edge (Tornhill hidden coupling).",
     refs: [
       { type: "audit", plugin: "coupling", slug: "high-fan-out", weight: 1 },
       { type: "audit", plugin: "eslint", slug: "code-smells-domain-boundaries-a16d575fb0debb40", weight: 2 },
@@ -195,7 +200,8 @@ const declaredCategories = [
   {
     slug: "type-safety",
     title: "Type Safety",
-    description: "TypeScript compiler diagnostics + type-coverage (inferred-any measurement). Catches type issues beyond what `no-explicit-any` covers.",
+    description:
+      "TypeScript compiler diagnostics + type-coverage (inferred-any measurement). Catches type issues beyond what `no-explicit-any` covers.",
     refs: [
       { type: "audit", plugin: "typescript", slug: "semantic-errors", weight: 3 },
       { type: "audit", plugin: "typescript", slug: "syntax-errors", weight: 2 },
@@ -207,19 +213,55 @@ const declaredCategories = [
   {
     slug: "security",
     title: "Security & Dependencies",
-    description: "npm audit vulnerabilities and outdated dependencies. Critical vulns weighted heavily; outdated is informational.",
+    description:
+      "npm audit vulnerabilities and outdated prod dependencies. Critical prod vulns weighted heavily; dev vulns and outdated prod are lower weight. npm-outdated-dev was dropped — patch-version lag on dev tools isn't a defect signal.",
+    // Refs filled in dynamically by buildSecurityRefs() because the pm
+    // prefix (npm-, yarn-classic-, pnpm-) isn't known until we detect.
+    refs: [],
+  },
+  {
+    slug: "accessibility",
+    title: "Accessibility",
+    description:
+      "jsx-a11y curated subset — the rules that actually catch real user-facing accessibility issues (alt text, ARIA props, interactive focus management, anchor validity). Not the full set; noisy rules on non-standard patterns intentionally excluded.",
     refs: [
-      { type: "audit", plugin: "js-packages", slug: "npm-audit-prod", weight: 3 },
-      { type: "audit", plugin: "js-packages", slug: "npm-audit-dev", weight: 2 },
-      { type: "audit", plugin: "js-packages", slug: "npm-outdated-prod", weight: 1 },
-      { type: "audit", plugin: "js-packages", slug: "npm-outdated-dev", weight: 0 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-alt-text", weight: 3 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-anchor-has-content", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-anchor-is-valid", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-aria-props", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-aria-role", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-aria-unsupported-elements", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-interactive-supports-focus", weight: 3 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-no-autofocus", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-no-noninteractive-element-interactions", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-role-has-required-aria-props", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "jsx-a11y-role-supports-aria-props", weight: 2 },
+    ],
+  },
+  {
+    slug: "test-quality",
+    title: "Test Quality",
+    description:
+      "Test correctness + coverage. testing-library rules catch antipatterns that make tests flaky or brittle (e.g. container queries, sync queries, render-in-lifecycle). Coverage is genuine test-exercise measurement.",
+    refs: [
+      { type: "audit", plugin: "eslint", slug: "testing-library-no-await-sync-queries", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-no-render-in-lifecycle", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-prefer-screen-queries", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-prefer-user-event", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-prefer-presence-queries", weight: 1 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-no-container", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-no-dom-import", weight: 2 },
+      { type: "audit", plugin: "eslint", slug: "testing-library-no-unnecessary-act", weight: 1 },
+      { type: "audit", plugin: "coverage", slug: "function-coverage", weight: 2 },
+      { type: "audit", plugin: "coverage", slug: "branch-coverage", weight: 2 },
+      { type: "audit", plugin: "coverage", slug: "line-coverage", weight: 1 },
     ],
   },
   {
     slug: "maintainability",
     title: "Maintainability",
     description:
-      "Lagging signals correlated with bug density: duplicated code, churn, bug-fix density, ownership dispersion, dead code.",
+      "Lagging signals correlated with bug density: duplicated code, churn, bug-fix density, ownership dispersion, dead code. bus-factor is gated to files with >= 2 distinct authors, so solo repos don't flood with unactionable single-author findings.",
     refs: [
       { type: "audit", plugin: "duplication", slug: "duplicated-lines", weight: 1 },
       { type: "audit", plugin: "churn", slug: "file-churn", weight: 1 },

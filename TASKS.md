@@ -11,6 +11,11 @@
     description that barely says what rule fired. Users seeing a 500-row
     report can't triage because they don't know which findings actually
     matter.
+    **Partial progress (Apr 2026):** `docs/audit-review.md` contains the
+    research-backed review (What/Why/When-to-fix/FP risk) for all scored
+    audits. What's still missing is (a) per-audit `docs/audits/<slug>.md`
+    explainers the report can link to, and (b) the CI check that fails
+    when new audits ship without docs.
     Deliverables:
     1. Enumerate every audit across all plugins:
        - ESLint rules in `eslint.target-rules.mjs` (~40+ rules including

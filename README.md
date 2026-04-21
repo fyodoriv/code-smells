@@ -29,16 +29,21 @@ Worth doing if you run the tool more than occasionally:
 
 ## What you get
 
-**Six categories** scored 0-100, composed from **40+ audits** across **12 plugins**:
+**Eight categories** scored 0-100, composed from **50+ audits** across **11 plugins**:
 
 | Category | Signal |
 |---|---|
-| **Component Health** | Body size, complexity, hook overload, multi-component files |
+| **Component Health** | Body size, cognitive complexity, hook overload, multi-component files |
 | **Render Performance** | Inline props in JSX, unstable `useSelector` returns |
 | **Coupling** | Import fan-out, domain-boundary violations (opt-in), hidden temporal coupling |
 | **Type Safety** | TypeScript compiler diagnostics + type-coverage (inferred-any) |
-| **Security & Dependencies** | npm audit vulnerabilities + outdated deps |
+| **Security & Dependencies** | npm audit vulnerabilities + outdated prod deps |
+| **Accessibility** | jsx-a11y curated subset (alt text, ARIA, focus management) |
+| **Test Quality** | testing-library antipatterns + function/branch/line coverage |
 | **Maintainability** | Duplicated code, churn, bug-fix density, author + team dispersion, dead code |
+
+Categories auto-adapt to target capabilities — no tsconfig skips Type Safety,
+no lockfile skips Security, no lcov skips the coverage portion of Test Quality.
 
 Output looks like this:
 
@@ -49,16 +54,20 @@ Output looks like this:
 ●  code-smells/hook-count                    12 violations
 ●  temporal-coupling/hidden-coupling         8 pairs (max 100% co-change)
 ●  team-ownership/cross-team-churn           0 files
-●  ... 30 more audits ...
+●  jsx-a11y/alt-text                         3 violations
+●  testing-library/no-container              2 violations
+●  ... 40 more audits ...
 
 ┌───────────────────────────┬─────────┬──────────┐
 │  Category                 │  Score  │  Audits  │
 ├───────────────────────────┼─────────┼──────────┤
-│  Component Health         │      0  │       6  │
-│  Render Performance       │     43  │       5  │
+│  Component Health         │      0  │       5  │
+│  Render Performance       │     43  │       4  │
 │  Coupling                 │     97  │       3  │
 │  Type Safety              │     73  │       5  │
-│  Security & Dependencies  │    100  │       4  │
+│  Security & Dependencies  │    100  │       3  │
+│  Accessibility            │     92  │      11  │
+│  Test Quality             │     78  │      11  │
 │  Maintainability          │     89  │      11  │
 └───────────────────────────┴─────────┴──────────┘
 ```
@@ -140,7 +149,7 @@ Full setup guide in [`docs/ci-integration.md`](docs/ci-integration.md). Three [G
 
 ```
 code-smells/
-├── code-pushup.config.mjs            # 12 plugins + 6 categories
+├── code-pushup.config.mjs            # 11 plugins + 8 categories
 ├── eslint.target-rules.mjs           # Opinionated ESLint config applied to target source
 ├── eslint-rules/                     # Custom ESLint rules (~180 lines total)
 ├── plugins/                          # Thin adapters over existing tools

@@ -263,6 +263,23 @@ describe("authorDispersionPlugin", () => {
     expect(busFactor.value).toBe(0);
   });
 
+  it("ignores single-author files regardless of commit count", async () => {
+    // a.ts: Alice 10 commits, zero other authors. On a solo/personal repo
+    // every file looks like this — flagging them all as bus-factor risk
+    // is unactionable noise. Gate on >= 2 distinct authors.
+    mockRaw.mockResolvedValueOnce(
+      Array(10)
+        .fill(null)
+        .flatMap(() => ["COMMIT|Alice", "a.ts"])
+        .join("\n"),
+    );
+
+    const plugin = authorDispersionPlugin({ targetDir: "/t" });
+    const [, busFactor] = await plugin.runner();
+    expect(busFactor.value).toBe(0);
+    expect(busFactor.score).toBe(1);
+  });
+
   it("handles empty output", async () => {
     mockRaw.mockResolvedValueOnce("");
     const plugin = authorDispersionPlugin({ targetDir: "/t" });
