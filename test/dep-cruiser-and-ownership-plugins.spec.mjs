@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -41,6 +44,14 @@ describe("couplingPlugin", () => {
     expect(plugin.audits[0].slug).toBe("high-fan-out");
   });
 
+  // These tests pass `process.cwd()` as targetDir and need entry paths
+  // that actually exist on disk, because resolveEntries now filters
+  // entries to existing directories (the alternative — passing
+  // non-existent paths — would trigger the graceful-skip branch and
+  // skip the mocked cruise call entirely). `plugins` and `lib` are
+  // top-level directories of the code-smells repo itself.
+  const CWD_ENTRY = ["plugins", "lib"];
+
   it("flags modules with too many dependencies", async () => {
     mockCruise.mockResolvedValueOnce({
       output: {
@@ -52,7 +63,7 @@ describe("couplingPlugin", () => {
       },
     });
 
-    const plugin = couplingPlugin({ targetDir: process.cwd(), fanOutThreshold: 15 });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: CWD_ENTRY, fanOutThreshold: 15 });
     const [result] = await plugin.runner();
 
     expect(result.value).toBe(1); // a.ts only
@@ -68,7 +79,7 @@ describe("couplingPlugin", () => {
         modules: [{ source: "src/a.ts", dependencies: new Array(40).fill({ resolved: "x" }) }],
       },
     });
-    const plugin = couplingPlugin({ targetDir: process.cwd(), fanOutThreshold: 15 });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: CWD_ENTRY, fanOutThreshold: 15 });
     const [r] = await plugin.runner();
     expect(r.details.issues[0].severity).toBe("error");
   });
@@ -77,32 +88,46 @@ describe("couplingPlugin", () => {
     mockCruise.mockResolvedValueOnce({
       output: JSON.stringify({ modules: [{ source: "a.ts", dependencies: [] }] }),
     });
-    const plugin = couplingPlugin({ targetDir: process.cwd() });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: CWD_ENTRY });
     const [r] = await plugin.runner();
     expect(r.value).toBe(0);
   });
 
   it("empty modules list scores 1", async () => {
     mockCruise.mockResolvedValueOnce({ output: { modules: [] } });
-    const plugin = couplingPlugin({ targetDir: process.cwd() });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: CWD_ENTRY });
     const [r] = await plugin.runner();
     expect(r.score).toBe(1);
   });
 
-  it("resolves entry from an array verbatim", async () => {
+  it("resolves entry from an array, keeping paths that exist", async () => {
     mockCruise.mockResolvedValueOnce({ output: { modules: [] } });
-    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: ["libs/a", "libs/b"] });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: ["plugins", "lib"] });
     await plugin.runner();
     const [entries] = mockCruise.mock.calls[mockCruise.mock.calls.length - 1];
-    expect(entries).toEqual(["libs/a", "libs/b"]);
+    expect(entries).toEqual(["plugins", "lib"]);
+  });
+
+  it("filters array entries that do not exist on disk", async () => {
+    // Non-existent paths are dropped before cruise() runs so
+    // dependency-cruiser doesn't crash on stat(). cruise is still
+    // called with the filtered subset.
+    mockCruise.mockResolvedValueOnce({ output: { modules: [] } });
+    const plugin = couplingPlugin({
+      targetDir: process.cwd(),
+      entry: ["plugins", "does-not-exist", "lib"],
+    });
+    await plugin.runner();
+    const [entries] = mockCruise.mock.calls[mockCruise.mock.calls.length - 1];
+    expect(entries).toEqual(["plugins", "lib"]);
   });
 
   it("resolves comma-separated entry string", async () => {
     mockCruise.mockResolvedValueOnce({ output: { modules: [] } });
-    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: "libs/a, libs/b" });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: "plugins, lib" });
     await plugin.runner();
     const [entries] = mockCruise.mock.calls[mockCruise.mock.calls.length - 1];
-    expect(entries).toEqual(["libs/a", "libs/b"]);
+    expect(entries).toEqual(["plugins", "lib"]);
   });
 
   it("singular 'file' when one violation", async () => {
@@ -111,9 +136,23 @@ describe("couplingPlugin", () => {
         modules: [{ source: "a.ts", dependencies: new Array(20).fill({ resolved: "x" }) }],
       },
     });
-    const plugin = couplingPlugin({ targetDir: process.cwd(), fanOutThreshold: 15 });
+    const plugin = couplingPlugin({ targetDir: process.cwd(), entry: CWD_ENTRY, fanOutThreshold: 15 });
     const [r] = await plugin.runner();
     expect(r.displayValue).toContain("1 file ");
+  });
+
+  it("skips gracefully when no entries exist on disk", async () => {
+    // Covers the ENOENT crash that used to happen on flat-layout repos
+    // (no src/, no workspace subdirs). cruise must not be invoked.
+    const plugin = couplingPlugin({
+      targetDir: process.cwd(),
+      entry: "definitely-not-a-real-dir",
+    });
+    const [r] = await plugin.runner();
+    expect(r.score).toBe(1);
+    expect(r.value).toBe(0);
+    expect(r.displayValue).toMatch(/skipped|no source/i);
+    expect(mockCruise).not.toHaveBeenCalled();
   });
 });
 
@@ -145,23 +184,34 @@ describe("temporalCouplingPlugin", () => {
   });
 
   it("does NOT flag pairs that share an import edge", async () => {
-    mockRaw.mockResolvedValueOnce(
-      [">>>", "libs/a.ts", "libs/b.ts", ">>>", "libs/a.ts", "libs/b.ts"].join("\n"),
-    );
-    // Declared edge a.ts ↔ b.ts (stored as canonical pair key)
-    mockCruise.mockResolvedValueOnce({
-      output: {
-        modules: [{ source: "libs/a.ts", dependencies: [{ resolved: "libs/b.ts" }] }],
-      },
-    });
+    // This test needs `resolveEntries` to find a real source directory
+    // so the plugin actually calls cruise() to build the import-edge
+    // set. Create a minimal temp repo with a src/ dir.
+    const fixtureDir = mkdtempSync(join(tmpdir(), "tc-import-edge-"));
+    mkdirSync(join(fixtureDir, "src"));
+    writeFileSync(join(fixtureDir, "src", "placeholder.js"), "");
 
-    const plugin = temporalCouplingPlugin({
-      targetDir: process.cwd(),
-      coChangeThreshold: 0.5,
-      minPairCount: 2,
-    });
-    const [r] = await plugin.runner();
-    expect(r.value).toBe(0);
+    try {
+      mockRaw.mockResolvedValueOnce(
+        [">>>", "libs/a.ts", "libs/b.ts", ">>>", "libs/a.ts", "libs/b.ts"].join("\n"),
+      );
+      // Declared edge a.ts ↔ b.ts (stored as canonical pair key)
+      mockCruise.mockResolvedValueOnce({
+        output: {
+          modules: [{ source: "libs/a.ts", dependencies: [{ resolved: "libs/b.ts" }] }],
+        },
+      });
+
+      const plugin = temporalCouplingPlugin({
+        targetDir: fixtureDir,
+        coChangeThreshold: 0.5,
+        minPairCount: 2,
+      });
+      const [r] = await plugin.runner();
+      expect(r.value).toBe(0);
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
   });
 
   it("drops bulk commits that touch too many files", async () => {
