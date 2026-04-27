@@ -6,6 +6,9 @@
 # general-purpose servers like `github` since this tool does not touch
 # GitHub directly.
 
+skills:
+  - ./skill-plugins         # code-smells-aware skill — deploys to all agents via agentbrew sync
+
 mcp:
   - context7               # Library docs (code-pushup, ESLint, dep-cruiser, etc.)
   - tasks-mcp              # TASKS.md workflow for this repo's own backlog
