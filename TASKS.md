@@ -297,3 +297,27 @@ P2.
 (nothing open — `publish-cli` shipped 2026-04-20: the tool is now
 runnable via `npx code-smells` and releases are automated via
 release-please + a GitHub Actions publish workflow with npm provenance.)
+
+- [ ] Align code-smells agent guide with the shared agent-tool repo baseline
+  - **ID**: align-code-smells-agent-guide-baseline
+  - **Tags**: agents, agentbrew, docs, governance
+  - **Details**: Cross-repo audit on 2026-04-30 found `AGENTS.md` captures
+    important audit-specific rules, but it is missing the common agent-tool
+    sections that make Bosun, Taskgrind, dotfiles, and agentbrew easy for
+    agents to operate consistently: repo purpose, layout, development commands,
+    verification gate, task queue policy, Agentfile sync, and ownership
+    boundaries for generated agent config.
+  - **Files**:
+    - `AGENTS.md`
+    - `Agentfile.yaml`
+    - `TASKS.md`
+    - `skill-plugins/code-smells-aware/SKILL.md`
+  - **Acceptance**:
+    - `AGENTS.md` follows the shared baseline while preserving the audit
+      decision-log rule and code-smells-specific plugin guidance
+    - The canonical verify command is documented and matches `package.json`
+    - Agentfile skill source ownership and `agentbrew sync` expectations are
+      explicit
+    - `TASKS.md` has file-level policy comments for task format and verification
+      comparable to the other agent-tool repos
+    - `npx -y @tasks-md/lint TASKS.md` and the documented verify gate pass
