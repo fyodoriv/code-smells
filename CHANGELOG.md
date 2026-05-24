@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.12](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.11...code-smells-v0.2.12) (2026-05-24)
+
+
+### Features
+
+* **skills:** add code-smells-aware skill for AI agents ([#15](https://github.com/fyodoriv/code-smells/issues/15)) ([61c4f51](https://github.com/fyodoriv/code-smells/commit/61c4f51d41ffdabac59037d87855a893a43bb3e4))
+
+
+### Documentation
+
+* adopt ask-human-mcp convention via ask_human.md ([#18](https://github.com/fyodoriv/code-smells/issues/18)) ([8c2e89d](https://github.com/fyodoriv/code-smells/commit/8c2e89df0267d1767b485df2dc30acdb6c3fa7ba))
+* **tasks:** add agent guide alignment task ([6c5c240](https://github.com/fyodoriv/code-smells/commit/6c5c240ac950e4d4158ebe660fde966c72cf3bb6))
+
 ## [0.2.11](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.10...code-smells-v0.2.11) (2026-04-21)
 
 
