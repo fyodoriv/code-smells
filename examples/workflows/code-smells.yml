@@ -1,0 +1,139 @@
+# Code Smells — example GitHub Actions workflow for any target repo.
+#
+# Drop this into your repo at .github/workflows/code-smells.yml (and edit
+# the path-based filters + env vars below). The workflow:
+#
+#   1. On push to main: collects a fresh report and uploads report.json
+#      as a workflow artifact keyed by commit SHA.
+#   2. On pull_request: collects a new report, downloads the baseline
+#      artifact from the PR's merge-base commit, compares, posts a
+#      summary comment, and fails the job on regression.
+#
+# Prerequisites: the target repo must have access to the code-smells
+# tool. Two options:
+#   - (recommended for now) vendor code-smells into ./code-smells/
+#     as a git submodule or copied directory; invoke via
+#     'node ./code-smells/node_modules/.bin/code-pushup collect'.
+#   - (after publish-cli task ships) install via 'npx code-smells'.
+name: Code Smells
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      # Edit for your repo's source layout. Saves CI minutes by only
+      # running on real source / config changes.
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+      - "plugins/**/*.ts"
+      - "plugins/**/*.tsx"
+      - "libs/**/*.ts"
+      - "libs/**/*.tsx"
+      - "tsconfig*.json"
+      - "package.json"
+      - "yarn.lock"
+      - "package-lock.json"
+  pull_request:
+    paths:
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+      - "plugins/**/*.ts"
+      - "plugins/**/*.tsx"
+      - "libs/**/*.ts"
+      - "libs/**/*.tsx"
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git history for churn / bug-fix-density / author-dispersion / temporal-coupling
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install target repo deps
+        run: yarn install --frozen-lockfile # or: npm ci / pnpm install
+
+      - name: Install code-smells tool
+        # Replace with 'npx code-smells' once publish-cli ships.
+        # Until then, vendor the tool as a git submodule or copied dir.
+        # Adjust the clone URL to match where you host your fork/mirror.
+        run: |
+          git clone https://github.com/fyodoriv/code-smells /tmp/code-smells
+          (cd /tmp/code-smells && npm ci)
+
+      - name: Collect report
+        env:
+          # Edit for your repo's source layout.
+          CP_TARGET: ${{ github.workspace }}
+          CP_PATTERNS: "{plugins,libs}/*/src/**/*.{ts,tsx}"
+          # CP_ENTRY auto-detects monorepo workspaces; set explicitly only if
+          # your layout differs from plugins/<ws>/src + libs/<ws>/src.
+          # CP_TSCONFIG: tsconfig.json
+        run: |
+          cd /tmp/code-smells
+          npx code-pushup collect \
+            --persist.outputDir=${{ github.workspace }}/.code-smells \
+            --persist.format=json \
+            --persist.format=md
+
+      - name: Upload report as artifact (main branch only — becomes baseline)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-smells-baseline-${{ github.sha }}
+          path: .code-smells/report.json
+          retention-days: 90
+
+      - name: Download baseline from main (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v6
+        # If you prefer a first-party action, use 'actions/download-artifact@v4'
+        # + a separate step that looks up the latest artifact from main — the
+        # dawidd6 action is convenience for that pattern.
+        with:
+          name: code-smells-baseline-${{ github.event.pull_request.base.sha }}
+          path: .code-smells-baseline
+          workflow: code-smells.yml
+          branch: ${{ github.event.pull_request.base.ref }}
+          # Fall back to most recent artifact if the exact merge-base isn't
+          # cached — avoids PRs failing on noise.
+          search_artifacts: true
+          if_no_artifact_found: warn
+
+      - name: Compare report against baseline (PRs only, hard fail on regression)
+        if: github.event_name == 'pull_request'
+        run: |
+          cd /tmp/code-smells
+          if [ -f "${{ github.workspace }}/.code-smells-baseline/report.json" ]; then
+            npx code-pushup compare \
+              --before=${{ github.workspace }}/.code-smells-baseline/report.json \
+              --after=${{ github.workspace }}/.code-smells/report.json \
+              --persist.outputDir=${{ github.workspace }}/.code-smells \
+              --persist.filename=report-diff
+            # --fail-on=regression causes non-zero exit when any category
+            # regresses. Remove to make this advisory-only while teams ramp.
+            npx code-pushup compare \
+              --before=${{ github.workspace }}/.code-smells-baseline/report.json \
+              --after=${{ github.workspace }}/.code-smells/report.json \
+              --fail-on=regression
+          else
+            echo "::warning::No baseline found — skipping comparison. A future PR will have a baseline once main runs this workflow."
+          fi
+
+      - name: Post summary comment on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: code-smells-summary
+          # Keep the summary compact — inline-per-line annotations are noisy.
+          # Google Tricorder found they reduce fix rate vs a single summary.
+          path: .code-smells/report-diff.md
+          # Fall back to the non-diff report if no diff was produced (e.g. first
+          # run on a new repo without a baseline).
+          recreate: true
+baseline).
+          recreate: true

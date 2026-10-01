@@ -1,0 +1,100 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  # Allow manual publish runs (e.g. to publish a release that was created
+  # before NPM_TOKEN was configured). Target tag defaults to 'latest-release'
+  # which resolves to the most recent GitHub release.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish to npm (defaults to latest release)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Required for npm provenance attestations (OIDC).
+  id-token: write
+
+jobs:
+  # On main-branch pushes: accumulate conventional commits into a release PR,
+  # and when that PR merges, create a GitHub release. Skipped on manual runs.
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+  # Publish to npm when either:
+  #   - release-please just created a release in this run (fold-in trigger so
+  #     we work around GitHub's 'workflows created by GITHUB_TOKEN don't fire
+  #     the release event' safeguard), OR
+  #   - the workflow was manually dispatched (bootstrap / recovery path).
+  publish:
+    needs: release-please
+    if: |
+      always() &&
+      (needs.release-please.outputs.release_created == 'true' ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag to publish
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag }}" ]; then
+              echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+            else
+              # Latest release by API — tolerate the component-prefixed tag
+              # release-please uses (code-smells-v0.2.1) as well as a plain
+              # vX.Y.Z shape.
+              latest=$(gh release view --repo ${{ github.repository }} --json tagName -q .tagName)
+              echo "tag=$latest" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "tag=${{ needs.release-please.outputs.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # ships with npm 11+; required for OIDC trusted publishing
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify CLI binary is runnable
+        run: |
+          chmod +x ./bin/code-smells.mjs
+          node -e "require('./package.json').bin['code-smells']"
+
+      - name: Publish to npm with provenance (Trusted Publishing / OIDC)
+        # Uses npm's OIDC trusted publisher flow — no NPM_TOKEN required.
+        # Requires a one-time setup on npmjs.com:
+        #   package settings → Trusted Publisher → GitHub Actions
+        #   → org: fyodoriv, repo: code-smells, workflow: release-please.yml
+        # 2FA on the npm account is a non-issue with this flow: there's no
+        # credential for 2FA to protect; GitHub's OIDC identity is the auth.
+        #
+        # IMPORTANT: we don't pass `registry-url` to setup-node because that
+        # writes `_authToken=${NODE_AUTH_TOKEN}` into .npmrc. Without a token
+        # set, that expands to the literal sentinel string and npm CLI
+        # tries to use it as auth — which fails with a misleading 404. By
+        # leaving .npmrc untouched, npm's trusted-publishing OIDC flow
+        # takes over automatically.
+        run: npm publish --provenance --access public
