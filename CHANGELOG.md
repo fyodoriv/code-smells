@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.12](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.11...code-smells-v0.2.12) (2026-11-19)
+
+
+### Documentation
+
+* archive notice, skill moved to agentbrew ([#1](https://github.com/fyodoriv/code-smells/issues/1)) ([e22e323](https://github.com/fyodoriv/code-smells/commit/e22e32340a4449252bf7beabba7a41171e52f52b))
+
 ## [0.2.11](https://github.com/fyodoriv/code-smells/compare/code-smells-v0.2.10...code-smells-v0.2.11) (2026-04-21)
 
 
