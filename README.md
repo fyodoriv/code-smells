@@ -3,6 +3,13 @@
 [![license](https://img.shields.io/github/license/fyodoriv/code-smells.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)](https://nodejs.org)
 
+> [!IMPORTANT]
+> **Archived on 2026-11-18.** This repo is read-only. The npm package stays
+> published, frozen at `0.2.11`: `npx code-smells@0.2.11` still works.
+> The `code-smells-aware` agent skill now lives in
+> [agentbrew](https://github.com/fyodoriv/agentbrew/tree/main/skill-plugins/workflow/code-smells-aware)
+> (`agentbrew install code-smells-aware`).
+
 **A curated, research-backed static-analysis tool for React/TypeScript repos.** Thin wrapper over [code-pushup](https://github.com/code-pushup/cli) with opinionated defaults — hook overload, inline props, fan-out coupling, hidden temporal coupling ([Tornhill](https://pragprog.com/titles/atevol/software-design-x-rays/)), cross-team ownership ([Nagappan 2007](https://www.microsoft.com/en-us/research/publication/the-influence-of-organizational-structure-on-software-quality-an-empirical-case-study/)), and more. Zero setup against any TS/React repo.
 
 `cd` into the repo you want to scan, then run:
